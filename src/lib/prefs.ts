@@ -9,7 +9,35 @@ export type EditorMode = 'wysiwyg' | 'source' | 'preview';
 export type StartupMode = 'last' | 'blank';
 
 /** The paper: what the page itself is made of. */
-export type PageTheme = 'system' | 'light' | 'dark';
+export type PageTheme =
+  | 'system'
+  | 'light'
+  | 'dark'
+  | 'plain'
+  | 'blueprint'
+  | 'blueprint-inverse'
+  | 'black'
+  | 'legal';
+
+export interface PaperOption {
+  id: Exclude<PageTheme, 'system'>;
+  label: string;
+  hint: string;
+  /** Whether native controls should render light or dark on it. */
+  scheme: 'light' | 'dark';
+  sample: string;
+  ink: string;
+}
+
+export const PAPERS: readonly PaperOption[] = [
+  { id: 'light', label: 'Card', hint: 'cream stock', scheme: 'light', sample: '#f8f2e0', ink: '#221e16' },
+  { id: 'dark', label: 'Lamplight', hint: 'the same, at night', scheme: 'dark', sample: '#2e2a21', ink: '#e8e1cd' },
+  { id: 'plain', label: 'Plain', hint: 'white, black ink', scheme: 'light', sample: '#ffffff', ink: '#141414' },
+  { id: 'legal', label: 'Legal', hint: 'yellow pad', scheme: 'light', sample: '#fbefa8', ink: '#1d1c17' },
+  { id: 'blueprint', label: 'Blueprint', hint: 'blue on white', scheme: 'light', sample: '#eef2f8', ink: '#14306a' },
+  { id: 'blueprint-inverse', label: 'Cyanotype', hint: 'white on blue', scheme: 'dark', sample: '#123a76', ink: '#e8eef7' },
+  { id: 'black', label: 'Black', hint: 'white ink on black', scheme: 'dark', sample: '#0a0a0a', ink: '#f4f4f4' },
+];
 
 /**
  * The desk the page lies on — independent of the paper, so a dark desk can
@@ -26,6 +54,15 @@ export type DeskStyle =
   | 'leather-rich'
   | 'leather-tan'
   | 'leather-cream';
+
+/** How fine the desk's grain is drawn. */
+export type GrainSize = 'fine' | 'medium' | 'coarse';
+
+export const GRAINS: readonly { id: GrainSize; label: string }[] = [
+  { id: 'fine', label: 'Fine' },
+  { id: 'medium', label: 'Medium' },
+  { id: 'coarse', label: 'Coarse' },
+];
 
 /** The ink your buttons and links are written in. */
 export type AccentName =
@@ -87,7 +124,11 @@ export interface Prefs {
   page: PageTheme;
   /** The desk under it. */
   desk: DeskStyle;
+  /** How large the desk's grain is drawn. */
+  grain: GrainSize;
   accent: AccentName;
+  /** The red rule under the page header. Some papers do not want one. */
+  rule: boolean;
 }
 
 const DEFAULTS: Prefs = {
@@ -98,26 +139,33 @@ const DEFAULTS: Prefs = {
   lastNote: null,
   page: 'system',
   desk: 'system',
+  grain: 'fine',
   accent: 'ink',
+  rule: true,
 };
 
 const KEY = 'notey-prefs';
 /** The blank-startup scratch buffer rides along here, not in the vault. */
 const SCRATCH_KEY = 'notey-scratch';
 /*
- * Layout.astro's pre-paint script reads these three, before any bundle has
+ * Layout.astro's pre-paint script reads these, before any bundle has
  * loaded. They are mirrors of the fields above, kept as bare strings so
- * that script stays three lines and cannot throw on a half-written blob.
+ * that script stays short and cannot throw on a half-written blob.
  */
 const LOOK_KEYS = {
   page: 'notey-page',
   desk: 'notey-desk',
+  grain: 'notey-grain',
   accent: 'notey-accent',
+  rule: 'notey-rule',
 } as const;
 
 const isDesk = (v: unknown): v is DeskStyle =>
   v === 'system' || DESKS.some((d) => d.id === v);
 const isAccent = (v: unknown): v is AccentName => ACCENTS.some((a) => a.id === v);
+const isPaper = (v: unknown): v is Exclude<PageTheme, 'system'> =>
+  PAPERS.some((paper) => paper.id === v);
+const isGrain = (v: unknown): v is GrainSize => GRAINS.some((g) => g.id === v);
 
 export function loadPrefs(): Prefs {
   try {
@@ -130,14 +178,11 @@ export function loadPrefs(): Prefs {
       lastNote: typeof parsed.lastNote === 'string' ? parsed.lastNote : null,
       // `theme` was this field's name before the desk and the page could
       // differ; a stored one still says what the paper should be.
-      page:
-        parsed.page === 'light' || parsed.page === 'dark'
-          ? parsed.page
-          : parsed.theme === 'light' || parsed.theme === 'dark'
-            ? parsed.theme
-            : 'system',
+      page: isPaper(parsed.page) ? parsed.page : isPaper(parsed.theme) ? parsed.theme : 'system',
       desk: isDesk(parsed.desk) ? parsed.desk : 'system',
+      grain: isGrain(parsed.grain) ? parsed.grain : 'fine',
       accent: isAccent(parsed.accent) ? parsed.accent : 'ink',
+      rule: parsed.rule !== false,
     };
   } catch {
     return { ...DEFAULTS };
@@ -151,7 +196,9 @@ export function savePrefs(changes: Partial<Prefs>): Prefs {
     // Mirror the look where the pre-paint script looks for it.
     localStorage.setItem(LOOK_KEYS.page, next.page);
     localStorage.setItem(LOOK_KEYS.desk, next.desk);
+    localStorage.setItem(LOOK_KEYS.grain, next.grain);
     localStorage.setItem(LOOK_KEYS.accent, next.accent);
+    localStorage.setItem(LOOK_KEYS.rule, next.rule ? 'on' : 'off');
   } catch {
     // Storage refused (private window at quota) — the session still works.
   }
@@ -159,30 +206,43 @@ export function savePrefs(changes: Partial<Prefs>): Prefs {
 }
 
 /** What `system` means right now, for the paper. */
-export function resolvePage(page: PageTheme): 'light' | 'dark' {
-  if (page === 'light' || page === 'dark') return page;
+export function resolvePage(page: PageTheme): Exclude<PageTheme, 'system'> {
+  if (page !== 'system') return page;
   return typeof matchMedia === 'function' && matchMedia('(prefers-color-scheme: dark)').matches
     ? 'dark'
     : 'light';
 }
 
+/** Whether a paper reads as light or dark, for native controls. */
+export function schemeOf(paper: Exclude<PageTheme, 'system'>): 'light' | 'dark' {
+  return PAPERS.find((option) => option.id === paper)?.scheme ?? 'light';
+}
+
 /** What `system` means right now, for the desk: a plain one, matching. */
-export function resolveDesk(desk: DeskStyle, page: 'light' | 'dark'): Exclude<DeskStyle, 'system'> {
-  return desk === 'system' ? (page === 'dark' ? 'plain-dark' : 'plain-light') : desk;
+export function resolveDesk(
+  desk: DeskStyle,
+  scheme: 'light' | 'dark'
+): Exclude<DeskStyle, 'system'> {
+  return desk === 'system' ? (scheme === 'dark' ? 'plain-dark' : 'plain-light') : desk;
 }
 
 /**
  * Paint the look onto the document. Same three attributes the pre-paint
  * script sets, so applying a change mid-session and reloading agree.
  */
-export function applyLook(prefs: Pick<Prefs, 'page' | 'desk' | 'accent'>): void {
+export function applyLook(
+  prefs: Pick<Prefs, 'page' | 'desk' | 'grain' | 'accent' | 'rule'>
+): void {
   const page = resolvePage(prefs.page);
+  const scheme = schemeOf(page);
   const root = document.documentElement;
   root.dataset['page'] = page;
-  root.dataset['desk'] = resolveDesk(prefs.desk, page);
+  root.dataset['desk'] = resolveDesk(prefs.desk, scheme);
+  root.dataset['grain'] = prefs.grain;
   root.dataset['accent'] = prefs.accent;
+  root.dataset['rule'] = prefs.rule ? 'on' : 'off';
   // Native controls (selects, checkboxes) follow the paper, not the desk.
-  root.style.colorScheme = page;
+  root.style.colorScheme = scheme;
 }
 
 /** The unfiled page: a title and a body, kept only in this browser. */

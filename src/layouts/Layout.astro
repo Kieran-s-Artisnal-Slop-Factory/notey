@@ -31,26 +31,44 @@ const swPath = href('/sw.js');
       // mirrors them on every save and applies the same three attributes
       // when a choice changes mid-session.
       (() => {
+        // Kept in step with PAPERS in src/lib/prefs.ts: a paper, and
+        // whether native controls should render light or dark on it.
+        const SCHEMES = {
+          light: 'light',
+          dark: 'dark',
+          plain: 'light',
+          legal: 'light',
+          blueprint: 'light',
+          'blueprint-inverse': 'dark',
+          black: 'dark',
+        };
         const root = document.documentElement;
         let page = null;
         let desk = null;
+        let grain = null;
         let accent = null;
+        let rule = null;
         try {
           page = localStorage.getItem('notey-page');
           desk = localStorage.getItem('notey-desk');
+          grain = localStorage.getItem('notey-grain');
           accent = localStorage.getItem('notey-accent');
+          rule = localStorage.getItem('notey-rule');
         } catch {}
-        const resolved =
-          page === 'light' || page === 'dark'
+        const paper =
+          page && SCHEMES[page]
             ? page
             : matchMedia('(prefers-color-scheme: dark)').matches
               ? 'dark'
               : 'light';
-        root.dataset.page = resolved;
+        const scheme = SCHEMES[paper];
+        root.dataset.page = paper;
         root.dataset.desk =
-          desk && desk !== 'system' ? desk : resolved === 'dark' ? 'plain-dark' : 'plain-light';
+          desk && desk !== 'system' ? desk : scheme === 'dark' ? 'plain-dark' : 'plain-light';
+        root.dataset.grain = grain || 'fine';
         root.dataset.accent = accent || 'ink';
-        root.style.colorScheme = resolved;
+        root.dataset.rule = rule === 'off' ? 'off' : 'on';
+        root.style.colorScheme = scheme;
       })();
     </script>
   </head>

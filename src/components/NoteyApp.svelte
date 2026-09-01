@@ -35,6 +35,7 @@
   import { displayTitle, parseTags } from '../lib/notebook/model';
   import { backlinks, findWikiLinks, resolveNote, rewriteWikiLinks } from '../lib/notebook/wiki';
   import { parseNoteContent } from '../lib/vault/frontmatter';
+  import { fromFields, switchKind, toFields, type FieldKind, type FmField } from '../lib/vault/fmFields';
   import {
     assetRefsIn,
     isAssetPath,
@@ -49,7 +50,8 @@
     uniqueNotePath,
   } from '../lib/vault/model';
   import { noteAssetStore, type NoteAssetStore } from '../lib/vault/assetStore';
-  import { openVaultStore } from '../lib/vault/store';
+  import { onVaultHandover, openVaultStore, takeVault } from '../lib/vault/store';
+  import { VAULT_BUSY } from '../lib/vault/sqliteStore';
   import type { FolderEntry, Note, VaultStore } from '../lib/vault/types';
   import { loadPrefs, loadScratch, savePrefs, saveScratch, type EditorMode } from '../lib/prefs';
 
@@ -90,7 +92,11 @@
   let tagsText = $state('');
   let aliases = $state<string[]>([]);
   let parentId = $state<string | null>(null);
-  let extraRows = $state<{ key: string; value: string }[]>([]);
+  let extraRows = $state<FmField[]>([]);
+  /** Fields whose YAML will not parse; their old value is kept meanwhile. */
+  let invalidFields = $state<string[]>([]);
+  /** Aliases are edited as a field, comma-separated, like tags. */
+  let aliasesText = $state('');
   let createdAt = $state<string | null>(null);
   let updatedAt = $state('');
   let savedTitle = $state('');
@@ -102,9 +108,23 @@
   /* ── chrome (what little there is) ─────────────────────────────────── */
   let mode = $state<EditorMode>(bootPrefs.mode);
   let paletteOpen = $state(false);
+  /** Which view the palette should open on, when it is not the root. */
+  let paletteAt = $state<string | null>(null);
+
+  /** Open the library straight onto one notebook — what a crumb does. */
+  function openPaletteAt(folder: string): void {
+    paletteAt = folder;
+    paletteOpen = true;
+  }
   let feedback = $state<string | null>(null);
   let feedbackTimer: ReturnType<typeof setTimeout> | undefined;
   let missingLink = $state<string | null>(null);
+  /**
+   * Set when another tab holds the vault. Only one tab can — the browser
+   * will not share the database (see vault/store.ts) — so this tab keeps
+   * what it has already read and stops writing until you take it back.
+   */
+  let heldElsewhere = $state(false);
   let exportNote = $state<string | null>(null);
   let printHtml = $state('');
   let editor = $state<MarkdownEditor | undefined>();
@@ -207,9 +227,19 @@
           : undefined;
         if (remembered) await openNote(remembered, { remember: false });
       } catch (err) {
-        bootError = String(err);
+        // A vault held by another tab is a state, not a failure: the app
+        // still runs, it just cannot write until it is handed over.
+        if (String(err).includes(VAULT_BUSY)) heldElsewhere = true;
+        else bootError = String(err);
+        booted = true;
       }
     })();
+
+    // The other tab may ask for the vault at any time.
+    const stopWatching = onVaultHandover((handed) => {
+      heldElsewhere = handed;
+      if (handed) flash('Another tab took the vault; this one is read-only.');
+    });
 
     const onHide = (): void => void flushSave();
     const onVisibility = (): void => {
@@ -225,6 +255,7 @@
     document.addEventListener('visibilitychange', onVisibility);
     window.addEventListener('keydown', onKeydown);
     return () => {
+      stopWatching();
       window.removeEventListener('pagehide', onHide);
       document.removeEventListener('visibilitychange', onVisibility);
       window.removeEventListener('keydown', onKeydown);
@@ -238,13 +269,6 @@
   });
 
   /* ── open / close ──────────────────────────────────────────────────── */
-  function snapshotExtras(data: Record<string, unknown>): { key: string; value: string }[] {
-    const OWNED = new Set(['created', 'updated', 'tags', 'aliases']);
-    return Object.entries(data)
-      .filter(([key]) => !OWNED.has(key))
-      .map(([key, value]) => ({ key, value: typeof value === 'string' ? value : JSON.stringify(value) }));
-  }
-
   async function openNote(note: Note, opts: { remember?: boolean } = {}): Promise<void> {
     if (currentPath === note.id && !scratchOpen) return;
     await flushSave();
@@ -260,7 +284,9 @@
     tagsText = note.tags.join(', ');
     aliases = [...note.aliases];
     parentId = note.parent_id;
-    extraRows = snapshotExtras(fmData.get(note.id) ?? {});
+    extraRows = toFields(fmData.get(note.id) ?? {});
+    aliasesText = note.aliases.join(', ');
+    invalidFields = [];
     createdAt = note.created_at;
     updatedAt = note.updated_at;
     renameOffer = null;
@@ -299,6 +325,8 @@
       aliases = [];
       parentId = null;
       extraRows = [];
+      aliasesText = '';
+      invalidFields = [];
       createdAt = null;
       updatedAt = '';
       assetStore = null;
@@ -469,26 +497,13 @@
     }
   }
 
-  function extrasToFm(
-    rows: { key: string; value: string }[],
-    original: Record<string, unknown>
-  ): Record<string, unknown> {
-    const out: Record<string, unknown> = {};
-    for (const row of rows) {
-      const key = row.key.trim();
-      if (!key) continue;
-      const before = original[key];
-      // An untouched non-string value keeps its type; edited values are text.
-      out[key] =
-        before !== undefined && typeof before !== 'string' && JSON.stringify(before) === row.value
-          ? before
-          : row.value;
-    }
-    return out;
-  }
-
   async function doSave(): Promise<void> {
     if (!store) return;
+    // Another tab has the vault; writing is not this tab's to do.
+    if (heldElsewhere) {
+      saveState = null;
+      return;
+    }
     const id = currentPath;
     clearTimeout(saveTimer);
     saveTimer = undefined;
@@ -510,9 +525,16 @@
     const wasNamed =
       oldTitle !== '' && !/^untitled(\s+\d+)?$/i.test(oldTitle) && !unnamed.has(id);
     const renames = wasNamed && nextTitleRaw !== oldTitle;
-    const nextAliases = renames
-      ? [...new Set([...aliases, oldTitle])].filter((a) => a.toLowerCase() !== nextTitleRaw.toLowerCase())
-      : aliases;
+    /*
+     * Aliases are an ordinary frontmatter field you can edit, and a rename
+     * pushes the old name onto it. Both paths meet here.
+     */
+    const typedAliases = parseTags(aliasesText);
+    const nextAliases = (renames ? [...typedAliases, oldTitle] : typedAliases).filter(
+      (a, i, all) =>
+        a.toLowerCase() !== nextTitleRaw.toLowerCase() &&
+        all.findIndex((b) => b.toLowerCase() === a.toLowerCase()) === i
+    );
 
     const targetFolder = parentId;
     let targetPath = id;
@@ -528,6 +550,8 @@
       }
 
       const now = new Date().toISOString();
+      const builtFm = fromFields(extraRows);
+      invalidFields = builtFm.invalid;
       const note: Note = {
         id: targetPath,
         title: stemOf(nameOf(targetPath)),
@@ -535,7 +559,7 @@
         aliases: nextAliases,
         tags: parseTags(tagsText),
         parent_id: targetFolder,
-        fm: extrasToFm(extraRows, fmData.get(id) ?? {}),
+        fm: builtFm.data,
         created_at: createdAt ?? now,
         updated_at: now,
       };
@@ -552,6 +576,7 @@
       if (mountPath === id) mountPath = targetPath;
       body = nextBody;
       aliases = nextAliases;
+      aliasesText = nextAliases.join(', ');
       savedTitle = nextTitleRaw;
       updatedAt = now;
       createdAt = note.created_at;
@@ -945,6 +970,24 @@
     setTimeout(() => (printHtml = ''), 1000);
   }
 
+  /**
+   * Ask the other tab for the vault. It flushes and lets go; this tab
+   * opens it and picks up where the model left off.
+   */
+  async function takeOverVault(): Promise<void> {
+    try {
+      store = await takeVault();
+      heldElsewhere = false;
+      bootError = null;
+      await refreshFromRows();
+      booted = true;
+      flash('Writing here now. The other tab has gone read-only.');
+      if (currentPath) scheduleSave();
+    } catch (err) {
+      bootError = String(err);
+    }
+  }
+
   function noteAction(action: 'md' | 'html' | 'print' | 'close' | 'delete'): void {
     if (action === 'md') downloadMarkdown();
     else if (action === 'html') void downloadHtml();
@@ -955,7 +998,40 @@
 
   /* ── frontmatter extras ────────────────────────────────────────────── */
   function addExtraRow(): void {
-    extraRows = [...extraRows, { key: '', value: '' }];
+    extraRows = [...extraRows, { key: '', kind: 'text', value: '' }];
+  }
+
+  /**
+   * A click on the paper, below or beside the writing, puts the caret at
+   * the end of it. On a real page there is no "outside the text" to click,
+   * and a page that swallows a click reads as broken.
+   *
+   * Only bare paper counts: a click that landed on a control, a link, or
+   * inside the editor is that thing's click, not the page's.
+   */
+  function onSheetClick(event: MouseEvent): void {
+    if (event.defaultPrevented || event.button !== 0) return;
+    const target = event.target as HTMLElement | null;
+    if (!target) return;
+    if (target.closest('input, textarea, select, button, a, label, [contenteditable="true"]')) return;
+    // The editor's own chrome is not blank paper.
+    if (target.closest('.editor-toolbar')) return;
+    if (window.getSelection()?.toString()) return; // a drag-select, not a click
+    editor?.focusEnd();
+  }
+
+  /** Grow a YAML field with what it holds, up to a sensible ceiling. */
+  function yamlRows(value: string): number {
+    return Math.min(8, value.split(String.fromCharCode(10)).length + 1);
+  }
+
+  /** text → list → yaml → text: one button cycles a field's shape. */
+  function cycleFieldKind(index: number): void {
+    const next: Record<FieldKind, FieldKind> = { text: 'list', list: 'yaml', yaml: 'text' };
+    const row = extraRows[index];
+    if (!row) return;
+    extraRows = extraRows.map((f, i) => (i === index ? switchKind(f, next[f.kind]) : f));
+    scheduleSave();
   }
 
   function removeExtraRow(index: number): void {
@@ -1009,13 +1085,24 @@
       <p class="feedback" role="status" data-testid="notebook-feedback">{feedback}</p>
     {/if}
 
-    <article class="sheet" data-testid="notey-sheet" class:unfiled={scratchOpen}>
+    <!-- svelte-ignore a11y_click_events_have_key_events a11y_no_noninteractive_element_interactions -->
+    <article
+      class="sheet"
+      data-testid="notey-sheet"
+      class:unfiled={scratchOpen}
+      onclick={onSheetClick}
+    >
       <header class="sheet-head">
         <div class="head-left">
           {#if breadcrumb.length > 0}
             <nav class="breadcrumb" data-testid="notebook-breadcrumb">
               {#each breadcrumb as crumb, i (i)}
-                <span>{crumb}</span><span class="crumb-sep">/</span>
+                <button
+                  class="crumb"
+                  data-testid="notey-breadcrumb-link"
+                  title={`Open ${breadcrumb.slice(0, i + 1).join('/')} in the palette`}
+                  onclick={() => openPaletteAt(breadcrumb.slice(0, i + 1).join('/'))}
+                >{crumb}</button><span class="crumb-sep">/</span>
               {/each}
             </nav>
           {:else if !scratchOpen}
@@ -1044,11 +1131,6 @@
               }
             }}
           />
-          {#if aliases.length > 0}
-            <p class="muted aliases" data-testid="notebook-aliases">
-              Also answers to: {aliases.join(', ')}
-            </p>
-          {/if}
         </div>
 
         <!-- Frontmatter: above the red line, on the right. The unfiled
@@ -1092,27 +1174,87 @@
                 oninput={scheduleSave}
               />
             </div>
+            <div class="fm-row">
+              <label class="fm-key" for="notey-aliases">aliases</label>
+              <input
+                id="notey-aliases"
+                class="fm-input"
+                type="text"
+                placeholder="other names"
+                data-testid="notebook-aliases"
+                bind:value={aliasesText}
+                disabled={switching}
+                oninput={scheduleSave}
+              />
+            </div>
             {#each extraRows as row, i (i)}
-              <div class="fm-row">
+              <div class="fm-row" class:fm-row-block={row.kind === 'yaml'}>
                 <input
                   class="fm-key fm-key-input"
                   type="text"
                   placeholder="key"
                   aria-label="Frontmatter field name"
+                  data-testid="notey-fm-key"
                   bind:value={row.key}
                   oninput={scheduleSave}
                 />
-                <input
-                  class="fm-input"
-                  type="text"
-                  placeholder="value"
-                  aria-label="Frontmatter field value"
-                  bind:value={row.value}
-                  oninput={scheduleSave}
-                />
+                {#if row.kind === 'yaml'}
+                  <textarea
+                    class="fm-input fm-yaml"
+                    class:invalid={invalidFields.includes(row.key.trim())}
+                    rows={yamlRows(row.value)}
+                    placeholder="key: value"
+                    aria-label="Frontmatter field value, as YAML"
+                    data-testid="notey-fm-value"
+                    bind:value={row.value}
+                    oninput={scheduleSave}
+                  ></textarea>
+                {:else}
+                  <input
+                    class="fm-input"
+                    type="text"
+                    placeholder={row.kind === 'list' ? 'comma, separated' : 'value'}
+                    aria-label="Frontmatter field value"
+                    data-testid="notey-fm-value"
+                    bind:value={row.value}
+                    oninput={scheduleSave}
+                  />
+                {/if}
+                <button
+                  class="fm-kind"
+                  data-testid="notey-fm-kind"
+                  data-kind={row.kind}
+                  title={row.kind === 'text'
+                    ? 'A single value — click for a list'
+                    : row.kind === 'list'
+                      ? 'A list — click for YAML'
+                      : 'YAML — click for a single value'}
+                  aria-label={`Field shape: ${row.kind}`}
+                  onclick={() => cycleFieldKind(i)}
+                >
+                  {#if row.kind === 'text'}
+                    <svg viewBox="0 0 16 16" aria-hidden="true"><path d="M3 8h10" /></svg>
+                  {:else if row.kind === 'list'}
+                    <svg viewBox="0 0 16 16" aria-hidden="true">
+                      <circle cx="3.2" cy="4.5" r="1" /><path d="M6.5 4.5H13" />
+                      <circle cx="3.2" cy="8" r="1" /><path d="M6.5 8H13" />
+                      <circle cx="3.2" cy="11.5" r="1" /><path d="M6.5 11.5H13" />
+                    </svg>
+                  {:else}
+                    <svg viewBox="0 0 16 16" aria-hidden="true">
+                      <path d="M6 3H4.5A1.5 1.5 0 0 0 3 4.5v2A1.5 1.5 0 0 1 1.5 8 1.5 1.5 0 0 1 3 9.5v2A1.5 1.5 0 0 0 4.5 13H6" />
+                      <path d="M10 3h1.5A1.5 1.5 0 0 1 13 4.5v2A1.5 1.5 0 0 0 14.5 8 1.5 1.5 0 0 0 13 9.5v2a1.5 1.5 0 0 1-1.5 1.5H10" />
+                    </svg>
+                  {/if}
+                </button>
                 <button class="fm-remove" title="Remove field" onclick={() => removeExtraRow(i)}>×</button>
               </div>
             {/each}
+            {#if invalidFields.length > 0}
+              <p class="fm-warn" data-testid="notey-fm-invalid">
+                {invalidFields.join(', ')}: not valid YAML — the last good value was kept.
+              </p>
+            {/if}
             <button class="fm-add" data-testid="notey-fm-add" onclick={addExtraRow}>+ field</button>
           </div>
         {/if}
@@ -1126,7 +1268,19 @@
         {/if}
       </header>
 
-      <div class="red-rule" aria-hidden="true"></div>
+      <div class="red-rule" data-testid="notey-rule" aria-hidden="true"></div>
+
+      {#if heldElsewhere}
+        <p class="notice notice-warn" data-testid="notey-held-elsewhere">
+          notey is open in another tab, which has the vault — nothing here is
+          being saved.
+          <button
+            class="btn btn-sm"
+            data-testid="notey-take-over"
+            onclick={() => void takeOverVault()}>Write here instead</button
+          >
+        </p>
+      {/if}
 
       {#if missingLink}
         <p class="notice notice-warn" data-testid="notebook-missing-link">
@@ -1179,6 +1333,7 @@
 
   {#if paletteOpen}
     <CommandPalette
+      startAt={paletteAt}
       {notes}
       {folders}
       {current}
@@ -1193,7 +1348,10 @@
       onFileScratch={(folder) => void fileScratch(folder)}
       onNoteAction={noteAction}
       onBulk={runBulk}
-      onClose={() => (paletteOpen = false)}
+      onClose={() => {
+        paletteOpen = false;
+        paletteAt = null;
+      }}
     />
   {/if}
 
@@ -1229,21 +1387,32 @@
     /* Above the palette backdrop (z-index 80): the book opens the library
        and must also be able to close it. */
     z-index: 90;
-    width: 2.6rem;
-    height: 2.2rem;
+    width: 2.4rem;
+    height: 2.4rem;
     display: grid;
     place-items: center;
-    border: 0;
-    background: none;
-    padding: 0;
+    padding: 0.35rem;
     cursor: pointer;
-    color: var(--desk-ink-muted, var(--text-muted-color));
-    transition: color 120ms ease;
+    /*
+     * A chip of paper behind it. The book sits out on the desk, and some
+     * desks (oak, birch, cream) are close enough to the ink to wash it
+     * out; giving it the page's own surface makes it legible on every
+     * one of them without a special case per desk.
+     */
+    background: var(--surface-color);
+    border: 1px solid var(--border-strong-color);
+    border-radius: var(--radius-sm);
+    box-shadow: var(--shadow-1);
+    color: var(--text-muted-color);
+    transition:
+      color 120ms ease,
+      border-color 120ms ease;
   }
 
   .book:hover,
   .book.open {
-    color: var(--desk-ink, var(--text-color));
+    color: var(--color-primary);
+    border-color: var(--color-primary);
   }
 
   .book svg {
@@ -1304,6 +1473,50 @@
     position: relative;
   }
 
+  /*
+   * What the paper is PRINTED with, as opposed to what is written on it:
+   * a legal pad's blue rules, a blueprint's drafting grid. Painted in a
+   * layer of its own behind the writing, so no ported component has to
+   * know which paper it is on.
+   */
+  .sheet::before {
+    content: '';
+    position: absolute;
+    inset: 0;
+    pointer-events: none;
+    border-radius: inherit;
+    background-image: var(--paper-lines, none), var(--paper-grid, none);
+    background-size: var(--paper-lines-size, auto), var(--paper-grid-size, auto);
+    opacity: 0.9;
+  }
+
+  /* A legal pad also has a red margin ruled down the left. */
+  :global(:root[data-page='legal']) .sheet::after {
+    content: '';
+    position: absolute;
+    top: 0;
+    bottom: 0;
+    left: calc(var(--space-6) - 0.55rem);
+    width: 1px;
+    background: var(--paper-margin-line, transparent);
+    pointer-events: none;
+  }
+
+  /* The drafting papers get a two-scale grid. */
+  :global(:root[data-page='blueprint']) .sheet,
+  :global(:root[data-page='blueprint-inverse']) .sheet {
+    --paper-grid:
+      linear-gradient(var(--paper-grid-fine) 1px, transparent 1px),
+      linear-gradient(90deg, var(--paper-grid-fine) 1px, transparent 1px),
+      linear-gradient(var(--paper-grid-major) 1px, transparent 1px),
+      linear-gradient(90deg, var(--paper-grid-major) 1px, transparent 1px);
+    --paper-grid-size: 24px 24px, 24px 24px, 120px 120px, 120px 120px;
+  }
+
+  :global(:root[data-page='legal']) .sheet {
+    --paper-lines-size: 100% calc(var(--line-height) * 1em);
+  }
+
   .sheet-head {
     display: grid;
     grid-template-columns: 1fr minmax(13rem, 0.6fr);
@@ -1327,6 +1540,21 @@
     text-transform: uppercase;
     color: var(--text-muted-color);
     font-weight: 700;
+  }
+
+  .crumb {
+    border: 0;
+    background: none;
+    padding: 0;
+    font: inherit;
+    color: inherit;
+    letter-spacing: inherit;
+    cursor: pointer;
+  }
+
+  .crumb:hover {
+    color: var(--color-primary);
+    text-decoration: underline;
   }
 
   .crumb-sep {
@@ -1413,11 +1641,72 @@
     border-bottom: 1px solid var(--color-primary);
   }
 
-  .fm-remove {
+  .fm-remove,
+  .fm-kind {
     border: 0;
     background: none;
     color: var(--text-muted-color);
     cursor: pointer;
+    flex: none;
+    padding: 0 1px;
+    line-height: 1;
+  }
+
+  .fm-kind {
+    width: 1.1rem;
+    height: 1.1rem;
+    display: grid;
+    place-items: center;
+    opacity: 0.55;
+  }
+
+  .fm-kind:hover {
+    opacity: 1;
+    color: var(--color-primary);
+  }
+
+  .fm-kind svg {
+    width: 100%;
+    height: 100%;
+    fill: none;
+    stroke: currentColor;
+    stroke-width: 1.4;
+    stroke-linecap: round;
+  }
+
+  .fm-kind svg circle {
+    fill: currentColor;
+    stroke: none;
+  }
+
+  /* A YAML field is a block, so its row stacks instead of sitting in line. */
+  .fm-row-block {
+    align-items: flex-start;
+    flex-wrap: wrap;
+  }
+
+  .fm-yaml {
+    flex: 1 1 100%;
+    order: 3;
+    font-family: var(--font-mono);
+    font-size: var(--font-size-eyebrow);
+    line-height: 1.45;
+    border: 1px dashed var(--border-color);
+    border-radius: var(--radius-sm);
+    padding: var(--space-1) var(--space-2);
+    resize: vertical;
+    white-space: pre;
+    overflow-wrap: normal;
+    overflow-x: auto;
+  }
+
+  .fm-yaml.invalid {
+    border-color: var(--color-danger);
+  }
+
+  .fm-warn {
+    font-size: var(--font-size-eyebrow);
+    color: var(--color-danger);
   }
 
   .fm-remove:hover {
@@ -1470,7 +1759,15 @@
     color: var(--color-danger);
   }
 
-  /* THE red rule — a double line, like the head of an index card. */
+  /* THE red rule — a double line, like the head of an index card. Some
+     papers (and some people) do not want one; the setting hides it and
+     leaves a plain hairline so the header still ends somewhere. */
+  :global(:root[data-rule='off']) .red-rule {
+    border-top: 1px solid var(--border-color);
+    border-bottom: 0;
+    height: 1px;
+  }
+
   .red-rule {
     border-top: 2px solid var(--rule-color);
     border-bottom: 1px solid var(--rule-color);

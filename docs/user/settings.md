@@ -19,9 +19,20 @@ explicit ask.
 
 ## The paper
 
-**System**, **Paper** (cream stock, typewriter ink) or **Lamplight** (the
-same page at night). System follows your OS. The choice is applied before the
-page paints, so there is no flash of the wrong one.
+What the page itself is made of. **System** follows your OS; the rest are
+chosen outright, and the choice is applied before the page paints so there
+is no flash of the wrong one.
+
+- **Card** — cream stock, typewriter ink. The original.
+- **Lamplight** — the same page at night.
+- **Plain** — white, black ink, nothing warm about it.
+- **Legal** — a yellow pad, ruled blue, with a red margin down the left.
+- **Blueprint** — dark blue linework on white drafting paper, gridded.
+- **Cyanotype** — the same drawing printed the other way round.
+- **Black** — white ink on black, like a gel pen.
+
+Under the papers is a switch for **the red rule** under the page header.
+Turn it off and the header ends in a plain hairline instead.
 
 ## The desk
 
@@ -38,6 +49,12 @@ hold a light page if that is what you want to look at.
 The textures are drawn by the browser rather than downloaded, so they cost
 nothing to load, never blur however large your screen is, and work offline
 like everything else.
+
+## The grain
+
+How large the desk's texture is drawn — **Fine**, **Medium** or **Coarse**.
+Fine is the default; coarse leather in particular looks more like hide from
+a distance and more like stucco up close.
 
 ## The pen
 
@@ -80,3 +97,7 @@ using and what you are allowed.
   answer is shown next to the button.
 - **The memory-only tier is a warning, not a bug report.** Close the private
   window and the notes are gone; that is what a private window is for.
+- **Only one tab can write at a time.** Open notey twice and the second tab
+  says so and offers to take the vault; the first then goes read-only until
+  you hand it back. Your browser will not let two tabs share one database,
+  so this is a hand-off rather than a lock.

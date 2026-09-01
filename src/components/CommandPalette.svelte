@@ -33,6 +33,7 @@
     | 'settings';
 
   let {
+    startAt = null,
     notes,
     folders,
     current,
@@ -49,6 +50,8 @@
     onBulk,
     onClose,
   }: {
+    /** A notebook path to open straight onto — what a breadcrumb passes. */
+    startAt?: string | null;
     notes: readonly Note[];
     folders: readonly FolderEntry[];
     current: Note | null;
@@ -70,9 +73,9 @@
     onClose: () => void;
   } = $props();
 
-  let view = $state<View>('root');
+  let view = $state<View>(startAt ? 'notebook' : 'root');
   /** Which notebook the 'notebook' view is showing. */
-  let openFolder = $state<string | null>(null);
+  let openFolder = $state<string | null>(startAt);
   /** What a 'new-notebook' will be created inside. */
   let newParent = $state<string | null>(null);
   /** The folder being renamed, when the name editor is a rename. */

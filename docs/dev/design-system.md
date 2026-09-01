@@ -26,9 +26,11 @@ Three attributes on `<html>`, set before first paint by the script in
 
 | Attribute | Chooses | Values |
 | --- | --- | --- |
-| `data-page` | the **paper** — the sheet, its ink, and the chrome that must stay legible on it | `light`, `dark` |
+| `data-page` | the **paper** — the sheet, its ink, and the chrome that must stay legible on it | `light` (card), `dark` (lamplight), `plain`, `legal`, `blueprint`, `blueprint-inverse`, `black` |
 | `data-desk` | the **desk** the sheet lies on | `plain-light`, `plain-dark`, `wood-mahogany`, `wood-oak`, `wood-birch`, `leather-black`, `leather-rich`, `leather-tan`, `leather-cream` |
 | `data-accent` | the **pen** — buttons, links, focus | `ink`, `oxblood`, `forest`, `teal`, `aubergine`, `rust`, `slate`, `moss` |
+| `data-grain` | how large the desk's texture is drawn | `fine`, `medium`, `coarse` |
+| `data-rule` | the red rule under the page header | `on`, `off` |
 
 They are independent because "the page is light" and "the desk is dark" have
 to be sayable at the same time. That is why nothing uses `light-dark()` any
@@ -66,6 +68,16 @@ SVG data URIs built from `feTurbulence`. Two ideas do all the work:
 Each desk stacks those greys over a colour with `background-blend-mode`, so
 one tile dresses every variant. `background-attachment: fixed` keeps the
 desk still while the page scrolls.
+
+They are tiles, so **`background-size` is the grain size**: `--grain-scale`
+multiplies every desk's tile at once, and `data-grain` sets it to 0.4, 0.7
+or 1. The default is the smallest, because at full size the leather read as
+stucco rather than hide.
+
+Some papers are *printed*, not just coloured: a legal pad's blue rules and
+red margin, a blueprint's two-scale grid. Those are painted by `.sheet`'s
+`::before` (and `::after` for the margin) from `--paper-lines` and
+`--paper-grid`, so no ported component needs to know which paper it is on.
 
 **The palette never sits on a texture.** Its panel is `--surface-raised-color`
 — a solid paper colour — so legibility does not depend on which desk is

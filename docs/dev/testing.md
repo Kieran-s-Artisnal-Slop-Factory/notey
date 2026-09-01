@@ -17,6 +17,7 @@ _Describes the code as of v0.1.0 (unreleased; schema v1) — verify against sour
 | [tests/local/notey.spec.ts](../../tests/local/notey.spec.ts) | Every browser case |
 | [src/lib/testMode.ts](../../src/lib/testMode.ts) | The gate — the hook chunk is only fetched when the flag is set |
 | [src/lib/testHook.ts](../../src/lib/testHook.ts) | `window.__notey`: raw vault reads and writes |
+| [src/lib/vault/store.ts](../../src/lib/vault/store.ts) | The tab hand-off the two-tab case drives |
 | [tools/preview-server.mjs](../../tools/preview-server.mjs) | A dependency-free static server over `dist/` |
 
 ## Commands
@@ -26,7 +27,7 @@ npm run test:unit   # vitest run
 npm test            # playwright test (builds first)
 ```
 
-## The unit suite — 288 cases in 17 files
+## The unit suite — 303 cases in 18 files
 
 | File | Cases | Covers |
 | --- | --- | --- |
@@ -37,6 +38,7 @@ npm test            # playwright test (builds first)
 | `encode/base64.test.ts` | 16 | RFC 4648 vectors, UTF-8, URL-safe alphabet, data URLs |
 | `vault/frontmatter.test.ts` | 15 | Round-trips, key order, broken YAML left as body, junk tolerance, date strings |
 | `notebook/assets.test.ts` | 14 | Ref parsing, the 2 MB cap and its message, `uniqueAssetName` and the `.excalidraw.png` compound suffix |
+| `vault/fmFields.test.ts` | 15 | The three frontmatter field shapes: which editor a value needs, untouched round-trips, list splitting, YAML that will not parse |
 | `vault/model.test.ts` | 12 | Path algebra, `sanitizeTitle`, unique paths, asset refs, `toNote` round-trips, tree building |
 | `notebook/bulk.test.ts` | 12 | Flattening, subtree ids, move targets, reparenting, tag add/remove, export filenames |
 | `fuzzy.test.ts` | 10 | Subsequence matching and the scoring floor |
@@ -48,7 +50,7 @@ npm test            # playwright test (builds first)
 | `vault/memoryStore.test.ts` | 5 | **The `VaultStore` contract**: implicit parents, subtree rename, clash refusal, subtree delete, meta |
 | `notebook/drawing.test.ts` | 5 | The `.excalidraw.png` convention and the vendored font list |
 
-## The browser suite — 28 cases
+## The browser suite — 41 cases
 
 The fixture gives every test a **fresh browser context** (fresh OPFS, fresh
 worker), installs `localStorage['notey-test-mode'] = '1'` with an init script
@@ -67,15 +69,22 @@ editor finishes mounting is swallowed by the mount.
 | organizing | Moving a note moves the file; deleting a notebook moves its notes up; bulk tag then delete touches only ticked rows; bulk move lands them in the notebook |
 | editor | Alt+0 cites at the cursor and files the definition; a mermaid fence renders; maths render while `$5 and $10` stays prose; the face is remembered across a reload |
 | exports | The HTML file is self-contained (no script, no link, no external URL beyond XML namespaces, fonts embedded); Markdown carries the title as an H1; a bulk export is one zip with both files |
-| preferences | The blank page keeps what you type without writing to the vault, and filing lands it in the Pile; "reopen the last note" works; Settings names the backend |
+| the page, in use | A click on blank paper puts the caret at the end of the writing; a breadcrumb opens the palette on that notebook |
+| frontmatter | Aliases are a field a rename fills in; a field can be a value, a list or YAML; a hand-written nested map survives an unrelated edit |
+| two tabs | A second tab is offered the vault rather than an error, and taking it puts the first one read-only |
+| preferences | The blank page keeps what you type without writing to the vault, and filing lands it in the Pile; "reopen the last note" works; the paper can be a legal pad and the rule can go; the grain re-scales; Settings names the backend |
 
 ## Pitfalls the suite encodes
 
 - **Wait for the app's own statement, not a duration.** `newNote()` waits for
   the title field to read `Untitled` — the field is one element every
   document binds into, so filling it early renames the *previous* note.
-- **The debounce chain is ~750 ms** (Milkdown 200 + editor 150 + app 400), so
-  `typeInCanvas` waits 900 ms rather than loosening an assertion.
+- **The body's debounce chain is long** (Milkdown 200 + editor 150 + app
+  1500), so assertions on saved content use `expect.poll` rather than a
+  fixed wait; `typeInCanvas`'s 900 ms only settles the editor, not the file.
+- **The title is committed by blurring**, not by typing, so `setTitle`
+  fills and blurs — a test that only fills is testing the uncommitted state
+  on purpose.
 - **`retries: 0`.** A flaky data test is an untrustworthy data test; use
   `expect.poll`, not retries.
 - **Reuse of the preview server.** `reuseExistingServer` is on locally, so a

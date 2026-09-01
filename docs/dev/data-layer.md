@@ -16,6 +16,7 @@ _Describes the code as of v0.1.0 (unreleased; schema v1) — verify against sour
 | [src/lib/vault/types.ts](../../src/lib/vault/types.ts) | `FileRow`, `Note`, `FolderEntry`, the `VaultStore` interface |
 | [src/lib/vault/model.ts](../../src/lib/vault/model.ts) | Path algebra and the `FileRow` to `Note` conversion |
 | [src/lib/vault/frontmatter.ts](../../src/lib/vault/frontmatter.ts) | YAML frontmatter: tolerant in, lossless out |
+| [src/lib/vault/fmFields.ts](../../src/lib/vault/fmFields.ts) | The three field shapes the header edits: text, list, YAML |
 | [src/lib/vault/sqlite-worker.ts](../../src/lib/vault/sqlite-worker.ts) | All SQL, the schema, the persistence tiers |
 | [src/lib/vault/sqliteStore.ts](../../src/lib/vault/sqliteStore.ts) | Main-thread RPC proxy to that worker |
 | [src/lib/vault/tauriStore.ts](../../src/lib/vault/tauriStore.ts) | Real `.md` files under `Documents/Notey` |
@@ -112,6 +113,31 @@ Tolerant on the way in, lossless on the way out.
 newly-owned keys in canonical order, and omits `tags` and `aliases` when they
 are empty.
 
+### The three field shapes
+
+Frontmatter is YAML, so a value can be a scalar, a sequence, or a whole
+nested map. [fmFields.ts](../../src/lib/vault/fmFields.ts) offers one editor
+per shape rather than pretending everything is a string:
+
+| Kind | Holds | Edited as |
+| --- | --- | --- |
+| `text` | a string, number, boolean or date | one line |
+| `list` | a sequence of scalars | comma-separated, like tags |
+| `yaml` | a map, a list of maps, anything nested | the YAML itself |
+
+`kindOf` picks the shape when a note is opened; one button cycles it
+(text → list → YAML → text). Two rules make this safe:
+
+- **An untouched value round-trips as the object it was.** `fromFields`
+  compares each field against `displayValue(original)` and, when they match,
+  writes the original back — so `port: 8080` stays a number and a nested map
+  keeps its ordering even though nothing here can render it.
+- **A YAML field that will not parse keeps its previous value** and is
+  reported under the block, rather than being written as a broken string.
+
+`aliases` is one of these fields now (a list), so it can be edited and
+emptied by hand; a rename adds to it rather than being its only source.
+
 ## Paths
 
 `sanitizeTitle` swaps the characters no filesystem takes for `-` and keeps
@@ -179,6 +205,13 @@ the originals unless a sibling still references them.
 - **`meta` is barely used.** It exists so a future schema has somewhere to
   keep vault-level state; preferences deliberately live per-device in
   `localStorage`, not in the vault.
+- **One browser tab holds the vault at a time, and it is not a choice.**
+  The sqlite SAH-pool VFS needs the OPFS sync-access-handle API, which
+  exists only in dedicated workers; a SharedWorker can neither use it nor
+  start a dedicated worker that could (Chrome does not define `Worker` in
+  that scope). Tabs therefore hand the vault over rather than share it —
+  see [ui.md](ui.md) for what that looks like — and two tabs writing to one
+  note is impossible by construction rather than by a lock.
 - **The Tauri store ignores files it does not understand.** A stray `.txt` is
   invisible to notey but rides along on a folder rename and goes down with a
   folder delete, because those act on the real directory.

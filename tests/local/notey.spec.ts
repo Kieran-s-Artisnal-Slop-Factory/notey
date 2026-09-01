@@ -235,13 +235,122 @@ test.describe('naming', () => {
       .toContain('created:');
     // It was never called anything anyone could have linked to.
     expect((await app.read('Real name.md'))?.content).not.toContain('aliases');
-    await expect(app.page.getByTestId('notebook-aliases')).toHaveCount(0);
+    await expect(app.page.getByTestId('notebook-aliases')).toHaveValue('');
     // A SECOND rename is a real one, and does leave an alias.
     await titleField.fill('Better name');
     await titleField.blur();
-    await expect(app.page.getByTestId('notebook-aliases')).toContainText('Real name', {
+    await expect(app.page.getByTestId('notebook-aliases')).toHaveValue(/Real name/, {
       timeout: 10_000,
     });
+  });
+});
+
+test.describe('the page, in use', () => {
+  test('clicking blank paper below the writing puts the caret at the end', async ({ app }) => {
+    await openApp(app);
+    await typeInCanvas(app.page, 'first line');
+    /*
+     * Click low on the sheet but still on screen: the page is 8 x 11, so
+     * its bottom edge is well below the viewport and a click there would
+     * land nowhere at all.
+     */
+    const sheet = (await app.page.getByTestId('notey-sheet').boundingBox())!;
+    const viewport = app.page.viewportSize()!;
+    const y = Math.min(sheet.y + sheet.height - 60, viewport.height - 40);
+    await app.page.mouse.click(sheet.x + sheet.width / 2, y);
+    await app.page.keyboard.type(' and more');
+    await app.page.waitForTimeout(900);
+    await expect(app.page.getByTestId('notebook-editor-host')).toContainText('first line and more');
+  });
+
+  test('a breadcrumb opens the palette on that notebook', async ({ app }) => {
+    await openApp(app);
+    await app.write({ path: 'Work/Plan.md', kind: 'note', content: 'plan' });
+    await openNoteByLink(app, 'Plan');
+    await app.page.getByTestId('notey-breadcrumb-link').first().click();
+    await expect(app.page.getByTestId('notey-palette')).toBeVisible();
+    await expect(app.page.locator('.crumb .eyebrow')).toHaveText('Work');
+    await expect(item(app.page, '+ New note here')).toBeVisible();
+  });
+});
+
+test.describe('frontmatter', () => {
+  test('aliases are a field, and a rename fills it in', async ({ app }) => {
+    await openApp(app);
+    await app.write({ path: 'Named.md', kind: 'note', content: 'body' });
+    await openNoteByLink(app, 'Named');
+    const aliases = app.page.getByTestId('notebook-aliases');
+    await aliases.fill('Another name, A third');
+    await aliases.blur();
+    await expect
+      .poll(async () => (await app.read('Named.md'))?.content ?? '', { timeout: 10_000 })
+      .toContain('- Another name');
+    expect((await app.read('Named.md'))?.content).toContain('- A third');
+  });
+
+  test('a field can be a value, a list, or YAML', async ({ app }) => {
+    await openApp(app);
+    await app.write({ path: 'Fields.md', kind: 'note', content: 'body' });
+    await openNoteByLink(app, 'Fields');
+    await app.page.getByTestId('notey-fm-add').click();
+    await app.page.getByTestId('notey-fm-key').fill('people');
+    await app.page.getByTestId('notey-fm-value').fill('ada');
+    await expect
+      .poll(async () => (await app.read('Fields.md'))?.content ?? '', { timeout: 10_000 })
+      .toContain('people: ada');
+    // One press turns it into a list…
+    await app.page.getByTestId('notey-fm-kind').click();
+    await app.page.getByTestId('notey-fm-value').fill('ada, grace');
+    await expect
+      .poll(async () => (await app.read('Fields.md'))?.content ?? '', { timeout: 10_000 })
+      .toContain('- grace');
+    // …and another turns it into YAML, where a map is possible.
+    await app.page.getByTestId('notey-fm-kind').click();
+    await app.page.getByTestId('notey-fm-value').fill('host: example.com\nport: 22');
+    await expect
+      .poll(async () => (await app.read('Fields.md'))?.content ?? '', { timeout: 10_000 })
+      .toContain('host: example.com');
+    expect((await app.read('Fields.md'))?.content).toContain('port: 22');
+  });
+
+  test('a nested map written by hand survives an unrelated edit', async ({ app }) => {
+    await openApp(app);
+    await app.write({
+      path: 'Kept.md',
+      kind: 'note',
+      content: '---\ndeploy:\n  host: example.com\n  port: 22\nport: 8080\n---\n\nbody\n',
+    });
+    await openNoteByLink(app, 'Kept');
+    // The nested map is offered as YAML, not flattened into a string.
+    await expect(app.page.locator('[data-testid="notey-fm-kind"][data-kind="yaml"]')).toHaveCount(1);
+    // Touch something else entirely.
+    await app.page.getByTestId('notebook-tags').fill('touched');
+    await app.page.getByTestId('notebook-tags').blur();
+    await expect
+      .poll(async () => (await app.read('Kept.md'))?.content ?? '', { timeout: 10_000 })
+      .toContain('touched');
+    const content = (await app.read('Kept.md'))?.content ?? '';
+    expect(content).toContain('host: example.com');
+    expect(content).toContain('port: 22');
+    expect(content).toContain('port: 8080');
+  });
+});
+
+test.describe('two tabs', () => {
+  test('a second tab is offered the vault rather than an error', async ({ app }) => {
+    await openApp(app);
+    await app.write({ path: 'Contested.md', kind: 'note', content: 'body' });
+    // A second page in the same profile cannot have the database — the
+    // OPFS handles are exclusive — so it must say so and offer to take it.
+    const second = await app.page.context().newPage();
+    await second.goto('/');
+    await expect(second.getByTestId('notey-sheet')).toBeVisible({ timeout: 30_000 });
+    await expect(second.getByTestId('notey-held-elsewhere')).toBeVisible({ timeout: 30_000 });
+    // Taking it over works, and the first tab steps aside.
+    await second.getByTestId('notey-take-over').click();
+    await expect(second.getByTestId('notey-held-elsewhere')).toHaveCount(0, { timeout: 30_000 });
+    await expect(app.page.getByTestId('notey-held-elsewhere')).toBeVisible({ timeout: 30_000 });
+    await second.close();
   });
 });
 
@@ -317,7 +426,7 @@ test.describe('linking', () => {
     await expect(app.page.getByTestId('notebook-save-state')).toContainText('Saved', {
       timeout: 10_000,
     });
-    await expect(app.page.getByTestId('notebook-aliases')).toContainText('Target');
+    await expect(app.page.getByTestId('notebook-aliases')).toHaveValue(/Target/);
     await expect(app.page.getByTestId('notebook-rename-offer')).toContainText('1 note');
     // The file was renamed on disk.
     expect((await app.read('Renamed target.md'))?.kind).toBe('note');
@@ -562,6 +671,50 @@ test.describe('preferences', () => {
     await app.goto('/');
     await app.ready();
     await expect(app.page.getByTestId('notebook-title')).toHaveValue('Sticky', { timeout: 30_000 });
+  });
+
+  test('the paper can be a legal pad, and the red rule can go', async ({ app }) => {
+    await openApp(app);
+    await runCommand(app.page, 'Settings');
+    await app.page.getByTestId('notey-page-legal').click();
+    await expect
+      .poll(() => app.page.evaluate(() => document.documentElement.dataset['page']))
+      .toBe('legal');
+    // The pad is ruled: the sheet paints lines the plain papers do not.
+    const lines = await app.page.evaluate(() =>
+      getComputedStyle(document.querySelector('[data-testid="notey-sheet"]')!, '::before')
+        .backgroundImage
+    );
+    expect(lines).toContain('gradient');
+    await app.page.getByTestId('notey-rule-toggle').uncheck();
+    await expect
+      .poll(() => app.page.evaluate(() => document.documentElement.dataset['rule']))
+      .toBe('off');
+    await app.goto('/');
+    await app.ready();
+    // Both survive the reload, applied before the first paint.
+    expect(
+      await app.page.evaluate(() => [
+        document.documentElement.dataset['page'],
+        document.documentElement.dataset['rule'],
+      ])
+    ).toEqual(['legal', 'off']);
+  });
+
+  test('the desk grain can be re-scaled', async ({ app }) => {
+    await openApp(app);
+    await runCommand(app.page, 'Settings');
+    await app.page.getByTestId('notey-desk-leather-rich').click();
+    const grainSize = () =>
+      app.page.evaluate(() =>
+        getComputedStyle(document.documentElement).getPropertyValue('--grain-scale').trim()
+      );
+    await app.page.getByTestId('notey-grain-fine').click();
+    // Browsers serialise a custom property as written, minus the leading
+    // zero, so compare as a number rather than as text.
+    expect(Number(await grainSize())).toBeCloseTo(0.4);
+    await app.page.getByTestId('notey-grain-coarse').click();
+    expect(Number(await grainSize())).toBeCloseTo(1);
   });
 
   test('settings live in the palette and name the storage backend', async ({ app }) => {

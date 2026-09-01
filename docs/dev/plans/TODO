@@ -45,6 +45,13 @@ Additional things to keep in mind:
       long notes onto the desk, titles committing on blur instead of per
       keystroke, and no alias kept when a new note is named for the first
       time. 33 Playwright cases.
+- [x] Third UI round: seven papers (card, lamplight, plain, legal pad,
+      blueprint, cyanotype, black) with an optional red rule; a grain size
+      for the desk textures; click anywhere on the page to write; clickable
+      breadcrumbs; aliases and arbitrary YAML (values, lists, nested maps)
+      as editable frontmatter fields; a legible book; and tabs that hand the
+      vault over instead of refusing to open. 303 unit tests, 41 Playwright
+      cases.
 
 ## For human
 

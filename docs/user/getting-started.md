@@ -81,8 +81,12 @@ If you would rather have plain files on your disk, that is what the
   search or in the Pile.
 - **Clearing site data deletes everything.** Notes live in this browser only.
   Export what matters, and consider Settings → *Ask for persistent storage*.
-- **One tab at a time.** The vault takes an exclusive lock. A second tab says
-  so plainly rather than opening a second, diverging copy.
+- **One tab writes at a time.** Open notey twice and the second tab offers
+  to take the vault; the first goes read-only until you take it back. The
+  browser will not let two tabs share one database, so notey passes it
+  between them instead of pretending.
+- **Click anywhere on the page to start writing.** A click on blank paper
+  puts the caret at the end of what is there.
 - **Deleting a note asks first, and is final.** There is no trash.
 - **The first visit downloads the editor** — it is a real rich-text editor
   with maths inside, so it is not small. After that it works offline.

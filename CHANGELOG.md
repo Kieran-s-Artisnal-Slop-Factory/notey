@@ -7,6 +7,16 @@
   Each note is a Markdown file with YAML frontmatter shown above the red rule
   (title on the left, frontmatter on the right), filed into notebooks
   (folders) or left in the Pile.
+* **Seven papers.** Card (cream stock), Lamplight, Plain (white, black
+  ink), a yellow Legal pad with blue rules and a red margin, Blueprint (blue
+  on white) and Cyanotype (white on blue) with a drafting grid, and Black
+  with white ink. The red rule under the header can be switched off.
+* **Frontmatter is real YAML, and is edited as such.** A field can hold a
+  value, a list, or a nested map: one button cycles its shape, lists edit
+  comma-separated like tags, and maps edit as YAML. A value nobody touched
+  round-trips byte for byte, so a hand-written file keeps its numbers, its
+  nesting and its key order. Aliases are now one of these fields rather than
+  a line of prose, so they can be edited and removed like anything else.
 * **Choose the paper, the desk and the pen separately.** The page can be
   light while the desk is dark. Desks come as Plain, Wood (mahogany, oak,
   birch) or Leather (black, rich brown, tan, cream), and the textures are
@@ -40,6 +50,18 @@
   it into the Pile or any notebook. Settings can switch it to reopening the
   last note instead.
 
+## Other
+
+* **A second tab is offered the vault instead of an error.** Only one tab
+  can hold the database — the OPFS sync-access handles the sqlite VFS needs
+  exist only in dedicated workers, and a SharedWorker can neither use them
+  nor start a worker that can — so tabs hand it over instead: the new tab
+  asks, the old one flushes and goes read-only, and either can take it back.
+  Two tabs therefore cannot write to one note, by construction.
+* Clicking anywhere on the blank page puts the caret at the end of the
+  writing, the way a real page has no "outside the text".
+* Breadcrumbs are links: each one opens the palette on that notebook.
+
 ## Bug Fixes
 
 Found while building 0.1.0. The first three are in code ported from
@@ -63,6 +85,11 @@ Found while building 0.1.0. The first three are in code ported from
   list it returned to.
 * **The book could not close the palette it had opened** — the palette's
   backdrop covered it. It now sits above the backdrop.
+* **The command palette's book was washed out on light desks.** It sits on
+  a chip of paper now, so it is legible on oak, birch and cream too.
+* **The leather grain was the size of stucco.** The textures are tiles, so
+  the grain is scaled with `background-size` — 40% by default, with a
+  setting for fine, medium or coarse.
 * **A link to a note that did not exist yet created it as "Untitled"** when
   followed from the palette's Links view, leaving the link that made it still
   dangling. It now takes the link's own name.

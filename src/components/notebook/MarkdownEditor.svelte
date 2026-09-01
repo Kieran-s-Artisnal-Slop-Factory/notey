@@ -285,6 +285,34 @@
   }
 
   /**
+   * Put the caret at the end of the document and focus it. This is what a
+   * click on the blank paper below the writing should do: on a real page
+   * there is no "outside the text", so the click lands at the last line
+   * rather than doing nothing.
+   */
+  export function focusEnd(): void {
+    if (mode === 'preview') return;
+    if (mode === 'source') {
+      if (!cm) return;
+      const at = cm.state.doc.length;
+      cm.dispatch({ selection: { anchor: at }, scrollIntoView: true });
+      cm.focus();
+      return;
+    }
+    if (!crepe) return;
+    try {
+      crepe.editor.action((ctx) => {
+        const view = ctx.get(editorViewCtx);
+        const end = Selection.atEnd(view.state.doc);
+        view.dispatch(view.state.tr.setSelection(end).scrollIntoView());
+        view.focus();
+      });
+    } catch {
+      // Not mounted yet; nothing to place.
+    }
+  }
+
+  /**
    * A new document from outside — the parent switched notes without
    * remounting. Skipped when the prop is merely echoing what this component
    * just reported (`lastSaved`), and when it is an older echo that has since

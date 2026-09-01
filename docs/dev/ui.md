@@ -114,6 +114,28 @@ text would linger as a filter and hide every row.
 
 The receipt line ("Moved 2 notes.") stays under the list after the action.
 
+## Handing the vault between tabs
+
+```mermaid
+sequenceDiagram
+  participant B as The new tab
+  participant Bus as BroadcastChannel
+  participant A as The tab holding it
+  B->>B: open the vault — refused, the handles are taken
+  B-->>B: "notey is open in another tab" + Write here instead
+  B->>Bus: please-release
+  Bus->>A: please-release
+  A->>A: flush, close the database
+  A-->>A: goes read-only, says so
+  A->>Bus: released
+  Bus->>B: released
+  B->>B: open the vault, re-read the model
+```
+
+Both tabs stay usable: the one that stepped aside keeps every note it had
+already read and can ask for the vault back. The reason it works this way
+rather than by sharing is in [data-layer.md](data-layer.md).
+
 ## Where the state lives
 
 | State | Owner | Notes |
@@ -150,6 +172,14 @@ the wrong face with an empty document.
 - **The key handler is on the palette panel, not its input.** The settings
   view has no input, and Escape has to work there too; the panel takes
   focus when there is no field.
+- **A click on blank paper puts the caret at the end of the writing.** A
+  real page has no "outside the text", and a page that swallows a click
+  reads as broken. Clicks on controls, links and the editor's own toolbar
+  are still theirs.
+- **Breadcrumbs open the palette on that notebook**, which is why the
+  palette takes a `startAt`.
+- **The book sits on a chip of paper.** It lives out on the desk, and some
+  desks are close enough to the ink to wash a bare glyph out.
 - **The sheet's 8 x 11 shape is a minimum, not an aspect ratio.**
   `aspect-ratio` gives the box a definite height, which long writing then
   overflows — it spilled onto the desk until this changed.

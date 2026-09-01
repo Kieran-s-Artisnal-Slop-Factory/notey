@@ -12,11 +12,14 @@
   import {
     ACCENTS,
     DESKS,
+    GRAINS,
+    PAPERS,
     applyLook,
     loadPrefs,
     savePrefs,
     type AccentName,
     type DeskStyle,
+    type GrainSize,
     type PageTheme,
     type Prefs,
     type StartupMode,
@@ -77,22 +80,40 @@
 
   <section>
     <p class="eyebrow">The paper</p>
-    <div class="choices">
-      {#each [
-        { id: 'system', label: 'System' },
-        { id: 'light', label: 'Paper' },
-        { id: 'dark', label: 'Lamplight' },
-      ] as const as option (option.id)}
+    <div class="swatches">
+      <button
+        class="swatch"
+        class:on={prefs.page === 'system'}
+        title="Follow the system"
+        data-testid="notey-page-system"
+        onclick={() => update({ page: 'system' })}
+      >
+        <span class="chip chip-split"></span>
+        <span class="swatch-label">System</span>
+      </button>
+      {#each PAPERS as paper (paper.id)}
         <button
-          class="choice"
-          class:on={prefs.page === option.id}
-          data-testid={`notey-page-${option.id}`}
-          onclick={() => update({ page: option.id as PageTheme })}
+          class="swatch"
+          class:on={prefs.page === paper.id}
+          title={paper.hint}
+          data-testid={`notey-page-${paper.id}`}
+          onclick={() => update({ page: paper.id as PageTheme })}
         >
-          <span>{option.label}</span>
+          <span class="chip chip-paper" style={`--chip: ${paper.sample}; --chip-ink: ${paper.ink}`}
+          ></span>
+          <span class="swatch-label">{paper.label}</span>
         </button>
       {/each}
     </div>
+    <label class="toggle">
+      <input
+        type="checkbox"
+        checked={prefs.rule}
+        data-testid="notey-rule-toggle"
+        onchange={(event) => update({ rule: (event.currentTarget as HTMLInputElement).checked })}
+      />
+      The red rule under the header
+    </label>
   </section>
 
   <section>
@@ -125,6 +146,22 @@
         {/each}
       </div>
     {/each}
+  </section>
+
+  <section>
+    <p class="eyebrow">The grain</p>
+    <div class="choices">
+      {#each GRAINS as option (option.id)}
+        <button
+          class="choice"
+          class:on={prefs.grain === option.id}
+          data-testid={`notey-grain-${option.id}`}
+          onclick={() => update({ grain: option.id as GrainSize })}
+        >
+          <span>{option.label}</span>
+        </button>
+      {/each}
+    </div>
   </section>
 
   <section>
@@ -266,9 +303,41 @@
     flex: none;
   }
 
-  /* "Match" is both papers at once. */
+  /* "Match" and "System" are both papers at once. */
   .chip-split {
     background: linear-gradient(135deg, #e7dec6 50%, #23201a 50%);
+  }
+
+  /* A paper chip shows its ink as a written line. */
+  .chip-paper {
+    position: relative;
+    overflow: hidden;
+  }
+
+  .chip-paper::after {
+    content: '';
+    position: absolute;
+    left: 2px;
+    right: 2px;
+    top: 50%;
+    height: 1px;
+    background: var(--chip-ink, currentColor);
+    box-shadow:
+      0 -3px 0 var(--chip-ink, currentColor),
+      0 3px 0 var(--chip-ink, currentColor);
+    opacity: 0.75;
+  }
+
+  .toggle {
+    display: flex;
+    align-items: center;
+    gap: var(--space-2);
+    font-size: var(--font-size-sm);
+    cursor: pointer;
+  }
+
+  .toggle input {
+    accent-color: var(--color-primary);
   }
 
   /* A hint of the real thing on the wood and leather chips. */

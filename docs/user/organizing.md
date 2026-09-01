@@ -25,10 +25,21 @@ Open it and change **inside** in the frontmatter block, on the right of the
 page header. The file moves, and any images it uses move with it. Several at
 once: tick them in a list view and press **Move**.
 
-## Tags
+## Tags, aliases and your own fields
 
-Type them in the **tags** field, comma-separated. They are stored in the
-note's frontmatter, so they travel with the file.
+**Tags** and **aliases** are fields in the page header, comma-separated, and
+they are stored in the note's frontmatter so they travel with the file.
+
+**+ field** adds one of your own. Each field has a small button that changes
+what it can hold:
+
+- a **single value** — a name, a number, a date;
+- a **list** — commas separate the items, like tags;
+- **YAML** — for anything with structure, like a map of settings.
+
+Frontmatter is ordinary YAML, so a field you wrote by hand in another editor
+opens here as whatever it already was, and one you do not touch is written
+back exactly as you left it.
 
 ## Searching
 
@@ -72,3 +83,8 @@ What happened is reported underneath, and stays there after the action.
   are the tool for reliable recall.
 - **The tick boxes only appear in list views** — the Pile and inside a
   notebook — not in the search results at the root.
+- **A YAML field that does not parse is not saved over the old one.** The
+  block says which field it was, and the previous value stays until the YAML
+  is valid again.
+- **Breadcrumbs are links.** The notebook names above a note's title open
+  the palette on that notebook.

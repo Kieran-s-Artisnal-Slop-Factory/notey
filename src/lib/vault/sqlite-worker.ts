@@ -27,6 +27,16 @@ interface Req {
   args: Record<string, unknown>;
 }
 
+/**
+ * A connected tab. As a SharedWorker every tab talks to the SAME database
+ * over its own port, which is what lets two tabs be open at once: the OPFS
+ * handles are held once, here, instead of being fought over.
+ */
+interface Client {
+  id: number;
+  post(message: unknown): void;
+}
+
 type Db = {
   exec(opts: {
     sql: string;
@@ -333,18 +343,47 @@ const ops: Record<string, (args: Record<string, unknown>) => unknown | Promise<u
   },
 };
 
-self.onmessage = async (event: MessageEvent<Req>) => {
-  const { id, op, args } = event.data;
+let nextClientId = 1;
+
+/** Serve one connected tab. */
+function serve(client: Client): void {
+  client.post({ id: -2, ok: true, result: { client: client.id } });
+  // Tell it the module evaluated (a worker load error otherwise surfaces
+  // as a silent init timeout).
+  client.post({ id: -1, ok: true, result: 'ready' });
+}
+
+async function dispatch(client: Client, data: Req): Promise<void> {
+  const { id, op, args } = data;
   try {
     const handler = ops[op];
     if (!handler) throw new Error(`unknown op: ${op}`);
-    const result = await handler(args ?? {});
-    (self as unknown as Worker).postMessage({ id, ok: true, result });
+    const result = await handler({ ...(args ?? {}), client: client.id });
+    client.post({ id, ok: true, result });
   } catch (err) {
-    (self as unknown as Worker).postMessage({ id, ok: false, error: String(err) });
+    client.post({ id, ok: false, error: String(err) });
   }
-};
+}
 
-// Tell the main thread the module evaluated (worker load errors otherwise
-// surface as a silent init timeout).
-(self as unknown as Worker).postMessage({ id: -1, ok: true, result: 'ready' });
+/*
+ * One file, two entry points. As a SharedWorker (every browser but Safari)
+ * all tabs share this one database and nobody is locked out; as a plain
+ * Worker there is one per tab, and the OPFS pool below refuses the second
+ * — which is the old behaviour, kept only as a fallback.
+ */
+if ('onconnect' in self) {
+  (self as unknown as SharedWorkerGlobalScope).onconnect = (event: MessageEvent) => {
+    const port = event.ports[0]!;
+    const client: Client = { id: nextClientId++, post: (m) => port.postMessage(m) };
+    port.onmessage = (message: MessageEvent<Req>) => void dispatch(client, message.data);
+    port.start();
+    serve(client);
+  };
+} else {
+  const client: Client = {
+    id: nextClientId++,
+    post: (m) => (self as unknown as Worker).postMessage(m),
+  };
+  self.onmessage = (event: MessageEvent<Req>) => void dispatch(client, event.data);
+  serve(client);
+}

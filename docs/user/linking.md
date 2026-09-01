@@ -26,8 +26,9 @@ Both are read from the notes themselves each time, so they are never stale.
 
 ## Renaming
 
-Rename a note and old links keep working: the old title is kept as an alias,
-listed under the title as *Also answers to: …*.
+Rename a note and old links keep working: the old title is added to the
+note's **aliases** field, in the header beside its tags — so you can see
+them all, add your own, and delete ones you have finished with.
 
 If other notes still link by the old name, the page says so — *2 notes still
 link to "Old title"* — with one button, **Update them to "New title"**, that
@@ -48,8 +49,11 @@ a note just because you arrived.
   whichever comes first in the vault.
 - **A link inside a code block is not a link.** Fenced and inline code are
   skipped, so `[[example]]` in a snippet stays a snippet.
-- **Aliases accumulate.** Rename three times and the note answers to all three
-  old titles. They are in the frontmatter, so you can prune them by hand.
+- **Aliases accumulate.** Rename three times and the note answers to all
+  three old titles. They are a field in the header, so prune them there.
+- **Naming a brand-new note is not a rename.** A note that has never been
+  called anything but `Untitled` gets no alias when you name it, because
+  nothing could have linked to it yet.
 - **The rewrite is one action, not a setting.** It rewrites the links that
   exist when you press it; links written afterwards with the old name resolve
   through the alias anyway.
