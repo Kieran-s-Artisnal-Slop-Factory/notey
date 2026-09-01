@@ -1,0 +1,38 @@
+{
+  "version": "0.0.1",
+  "configurations": [
+    {
+      "name": "notey-dev",
+      "runtimeExecutable": "npm",
+      "runtimeArgs": [
+        "run",
+        "dev"
+      ],
+      "port": 4321
+    },
+    {
+      "name": "notey-dev-alt",
+      "runtimeExecutable": "npm",
+      "runtimeArgs": [
+        "run",
+        "dev",
+        "--",
+        "--port",
+        "4345"
+      ],
+      "port": 4345
+    },
+    {
+      "name": "notey-preview",
+      "runtimeExecutable": "node",
+      "runtimeArgs": [
+        "tools/preview-server.mjs",
+        "--port",
+        "4340",
+        "--dir",
+        "dist"
+      ],
+      "port": 4340
+    }
+  ]
+}

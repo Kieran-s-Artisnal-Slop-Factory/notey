@@ -1,0 +1,104 @@
+/*
+ * notey theme — card-index paper design system. All configurable design
+ * tokens live here; uses light-dark() so both themes are defined in one
+ * place, and color-scheme on :root makes the browser honor the user
+ * preference.
+ *
+ * Two sheets, one filing cabinet:
+ *   light — typewriter ink on cream card stock, on an aged-paper desk
+ *   dark  — the same desk by lamplight: everything warm and dimmed, never
+ *           cold slate
+ *
+ * Three inks + one stamp (the token NAMES are useful's — the ported editor
+ * components consume them by name — only the values are notey's):
+ *   ink    (--text-color)               what the typewriter left behind
+ *   pencil (--text-muted-color)         annotations, secondary text
+ *   pen    (--color-primary)            fountain-pen blue — links, actions,
+ *                                       and every [[wiki link]]
+ *   stamp  (--color-stamp)              the archivist's red — THE rule line
+ *                                       under a note's header, eyebrows,
+ *                                       focus rings. Used sparingly, like a
+ *                                       date stamp.
+ */
+:root {
+  color-scheme: light dark;
+
+  /* Fountain-pen blue — actions and links */
+  --color-primary: light-dark(#28439c, #9db1ee);
+  --color-primary-strong: light-dark(#1b2f70, #c3d0f7);
+  --color-primary-soft: light-dark(#dde3f4, #2c3a66);
+  --color-on-primary: light-dark(#fbf6e7, #1a2547);
+
+  /* The stamp accent — the red rule, and nothing casual */
+  --color-stamp: light-dark(#a8352c, #cf7466);
+
+  /* Surfaces — the desk, the page, a card lifted off the page */
+  --bg-color: light-dark(#e7dec6, #23201a);
+  --surface-color: light-dark(#f8f2e0, #2e2a21);
+  --surface-raised-color: light-dark(#fbf6e7, #383325);
+
+  /* Text */
+  --text-color: light-dark(#221e16, #e8e1cd);
+  --text-muted-color: light-dark(#6f654c, #a89c7d);
+
+  /* Lines. --border-color is decorative (card edges, table rules);
+     boundaries that IDENTIFY a control (inputs, search) use
+     --border-strong-color. */
+  --border-color: light-dark(#d9cdab, #4a4433);
+  --border-strong-color: light-dark(#8a7f63, #7d7457);
+
+  /* Ruled-paper guides (the faint blue lines a pad is printed with) and the
+     red rule under a note's header. notey-specific tokens. */
+  --rule-color: var(--color-stamp);
+  --ruled-line-color: light-dark(rgb(40 67 156 / 0.14), rgb(157 177 238 / 0.12));
+
+  /* Feedback. Never the stamp red — feedback must not read as brand. */
+  --color-success: light-dark(#3c6b34, #8fce85);
+  --color-danger: light-dark(#8f2b1f, #e08a77);
+  --color-warning: light-dark(#8a6116, #d9a94e);
+
+  /* Overlay scrim — ink wash, warm, so the desk stays paper. */
+  --scrim-color: light-dark(rgb(34 30 22 / 0.45), rgb(12 10 6 / 0.6));
+
+  /* Typography — a typewriter voice for everything. Courier Prime is
+     vendored (public/fonts); the stack degrades to the system's Couriers. */
+  --font-body: 'Courier Prime', 'Courier New', ui-monospace, 'Cascadia Code', Consolas, monospace;
+  /* The body face IS monospace, so this is an alias rather than a second
+     stack — code and readouts ask for "the mono face" by name. */
+  --font-mono: var(--font-body);
+  --font-size-sm: 0.85rem;
+  --font-size-base: 1rem;
+  --font-size-lg: 1.2rem;
+  --font-size-xl: 1.5rem;
+  --font-size-2xl: 2rem;
+  --line-height: 1.6;
+  /* Annotation voice: tiny, uppercase, wide-tracked (apply with .eyebrow) —
+     the "ACC. NO. 0001 · PERMANENT COLLECTION" register. */
+  --font-size-eyebrow: 0.7rem;
+  --tracking-label: 0.18em;
+  --tracking-wide: 0.08em;
+  --tracking-brand: 0.24em;
+
+  /* Spacing */
+  --space-1: 0.2rem;
+  --space-2: 0.4rem;
+  --space-3: 0.6rem;
+  --space-4: 0.8rem;
+  --space-5: 1.2rem;
+  --space-6: 2rem;
+
+  /* Shape — index cards have gently rounded corners */
+  --radius-sm: 2px;
+  --radius-md: 4px;
+  --radius-lg: 6px;
+  --radius-full: 999px;
+
+  /* Elevation — a sheet sits just off the desk; dialogs get a real throw */
+  --shadow-1: light-dark(0 1px 3px rgb(34 30 22 / 0.14), 0 1px 3px rgb(0 0 0 / 0.4));
+  --shadow-2: light-dark(0 14px 40px rgb(34 30 22 / 0.3), 0 16px 44px rgb(0 0 0 / 0.55));
+
+  /* Layout */
+  --page-max-width: 54rem;
+  --navbar-height: 3rem;
+  --sidebar-width: 17rem;
+}

@@ -1,0 +1,8 @@
+Courier Prime — SIL Open Font License 1.1
+Source: Google Fonts (fonts.google.com/specimen/Courier+Prime), latin subset, v11
+Regenerate: node tools/build-courier-prime.mjs
+
+CourierPrime-RegularItalic.woff2  21556 bytes  sha256:84f91615090e8b84f5adfb7e5826a8ad137c7a13e3687e4bfa85c275149df60f
+CourierPrime-BoldItalic.woff2  21980 bytes  sha256:8531294532e78dd2f7f5dd14b594633cafd1e5b2efadb83e024a5d56dd5343d1
+CourierPrime-Regular.woff2  18640 bytes  sha256:f09844e1f4fe9e67df2cc77474519e68756d559b4648278b9dd4f03c8ac9c31f
+CourierPrime-Bold.woff2  19348 bytes  sha256:5c7ae1cc9aae183453565c836b74a1b988f5f2e52b65098decb909b3930957ec

@@ -1,23 +1,152 @@
+---
+import '../styles/theme.css';
+import '../styles/global.css';
+import { href, isPath } from '../lib/paths';
+
+interface Props {
+  title: string;
+}
+
+const { title } = Astro.props;
+const currentPath = Astro.url.pathname;
+// Base-aware paths for the inline scripts / static links below (works whether
+// the app is served at the root or under a sub-path like GitHub Pages).
+const swPath = href('/sw.js');
+---
+
 <!doctype html>
-<html lang="en">
-	<head>
-		<meta charset="utf-8" />
-		<meta name="viewport" content="width=device-width" />
-		<link rel="icon" type="image/svg+xml" href="/favicon.svg" />
-		<link rel="icon" href="/favicon.ico" />
-		<meta name="generator" content={Astro.generator} />
-		<title>Astro Basics</title>
-	</head>
-	<body>
-		<slot />
-	</body>
+<html lang="en" data-sw-path={swPath}>
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <meta name="color-scheme" content="light dark" />
+    <meta name="description" content="notey — notes on paper, in your browser" />
+    <link rel="icon" href={href('/favicon.svg')} type="image/svg+xml" />
+    <link rel="manifest" href={href('/manifest.webmanifest')} />
+    <link rel="stylesheet" href={href('/fonts/fonts.css')} />
+    <title>{title} · notey</title>
+    <script is:inline>
+      // Apply the manual theme override before first paint to avoid a flash.
+      // 'light'/'dark' pin the scheme; anything else follows the OS setting.
+      (() => {
+        try {
+          const theme = localStorage.getItem('notey-theme');
+          document.documentElement.style.colorScheme =
+            theme === 'light' || theme === 'dark' ? theme : '';
+        } catch {}
+      })();
+    </script>
+  </head>
+  <body>
+    <script>
+      // Test hook: the chunk is fetched ONLY when the test-mode flag is set
+      // on this profile, so a real user never downloads it. See
+      // src/lib/testMode.ts.
+      import { installTestHookIfEnabled } from '../lib/testMode';
+      installTestHookIfEnabled();
+    </script>
+    <header class="topbar" data-print="hide">
+      <a class="brand" href={href('/')}>
+        <span class="brand-name">NOTEY</span>
+        <span class="brand-sub">notes on paper</span>
+      </a>
+      <nav class="row">
+        <a class:list={['nav-link', { current: isPath(currentPath, '/') }]} href={href('/')}>Notes</a>
+        <a
+          class:list={['nav-link', { current: isPath(currentPath, '/settings/') }]}
+          href={href('/settings/')}>Settings</a
+        >
+      </nav>
+    </header>
+    <main class="page">
+      <slot />
+    </main>
+    {
+      import.meta.env.PROD ? (
+        <script is:inline>
+          // Tauri serves the app from its own protocol and needs no service
+          // worker; a SW there would only cache a moving target.
+          if ('serviceWorker' in navigator && !('__TAURI_INTERNALS__' in window)) {
+            window.addEventListener('load', () => {
+              // The base-aware SW path is on <html data-sw-path>; registering
+              // it there also sets the worker's scope to the base.
+              navigator.serviceWorker
+                .register(document.documentElement.dataset.swPath)
+                .catch(() => {});
+            });
+          }
+        </script>
+      ) : (
+        <script is:inline>
+          // Dev: the service worker must NOT run — it caches Vite's module
+          // URLs and serves stale code after edits (blank pages). Unregister
+          // any leftover registration and drop only OUR caches (this page may
+          // share an origin with other apps under a path-multiplexing host).
+          if ('serviceWorker' in navigator) {
+            navigator.serviceWorker.getRegistrations().then((regs) => {
+              for (const reg of regs) reg.unregister();
+            });
+            if (window.caches) {
+              caches.keys().then((keys) => keys.filter((k) => k.startsWith('notey-cache-')).forEach((k) => caches.delete(k)));
+            }
+          }
+        </script>
+      )
+    }
+  </body>
 </html>
 
 <style>
-	html,
-	body {
-		margin: 0;
-		width: 100%;
-		height: 100%;
-	}
+  .topbar {
+    height: var(--navbar-height);
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    padding: 0 var(--space-5);
+    border-bottom: 1px solid var(--border-strong-color);
+    background: var(--bg-color);
+  }
+
+  .brand {
+    display: flex;
+    align-items: baseline;
+    gap: var(--space-3);
+    text-decoration: none;
+    color: var(--text-color);
+  }
+
+  .brand-name {
+    font-weight: 700;
+    letter-spacing: var(--tracking-brand);
+    font-size: var(--font-size-base);
+  }
+
+  .brand-sub {
+    font-size: var(--font-size-eyebrow);
+    letter-spacing: var(--tracking-wide);
+    color: var(--text-muted-color);
+  }
+
+  .nav-link {
+    font-size: var(--font-size-eyebrow);
+    letter-spacing: var(--tracking-label);
+    text-transform: uppercase;
+    font-weight: 700;
+    text-decoration: none;
+    color: var(--text-muted-color);
+    padding: var(--space-1) var(--space-2);
+  }
+
+  .nav-link.current {
+    color: var(--color-stamp);
+    border-bottom: 2px solid var(--color-stamp);
+  }
+
+  .nav-link:hover {
+    color: var(--text-color);
+  }
+
+  .page {
+    min-height: calc(100dvh - var(--navbar-height));
+  }
 </style>

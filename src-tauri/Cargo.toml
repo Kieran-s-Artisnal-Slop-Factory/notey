@@ -1,0 +1,24 @@
+[package]
+name = "notey"
+version = "0.1.0"
+description = "notey — notes on paper, as a desktop app writing real .md files"
+authors = ["Kieran Wood"]
+edition = "2021"
+
+# The desktop shell is deliberately thin: Tauri + the fs and dialog
+# plugins. Everything interesting happens in the shared web frontend;
+# src/lib/vault/tauriStore.ts is the only code that knows this exists.
+
+[lib]
+name = "notey_lib"
+crate-type = ["staticlib", "cdylib", "rlib"]
+
+[build-dependencies]
+tauri-build = { version = "2", features = [] }
+
+[dependencies]
+tauri = { version = "2", features = [] }
+tauri-plugin-fs = "2"
+tauri-plugin-dialog = "2"
+serde = { version = "1", features = ["derive"] }
+serde_json = "1"

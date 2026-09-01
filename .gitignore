@@ -1,6 +1,5 @@
 # build output
 dist/
-
 # generated types
 .astro/
 
@@ -20,5 +19,10 @@ pnpm-debug.log*
 # macOS-specific files
 .DS_Store
 
-# jetbrains setting folder
-.idea/
+# test artifacts
+test-results/
+tests/local/.results/
+
+# Tauri build output
+src-tauri/target/
+src-tauri/gen/
