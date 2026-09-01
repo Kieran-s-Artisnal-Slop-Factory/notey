@@ -13,8 +13,9 @@ notebook tool is ported from the sibling `useful` repo (v0.4.0, its schema
 v16); per-file portability verdicts were taken by reading that source in full
 and are recorded inline below.
 
-> **Progress:** phases are marked DONE in the overview table and on their own
-> heading as they land. Everything else is still plan.
+> **Progress:** all ten phases landed, plus a UI rework taken during Phase 6
+> (decision 10) that removed the sidebar built in Phase 4. 288 unit tests and
+> 28 Playwright cases are green against the production build.
 
 ---
 
@@ -88,6 +89,18 @@ are the part that ages.
 9. **CI deploys without running tests**, mirroring useful ("a red suite
    still deploys"); tests are a local release-gate obligation. Deviating is
    a one-line change later.
+10. **No sidebar: the page, a book, and Ctrl+K.** *(Taken during Phase 6,
+   replacing the sidebar built in Phase 4.)* notey opens on a blank
+   unfiled page — a title and a sheet in an 8 × 11 shape — and every
+   other control lives in the command palette, opened with Ctrl+K or by
+   the book in the corner (closed on the page, open while the library
+   shows). The palette is a stack of views rather than a menu that closes
+   on every press: picking *View notebooks* stays open and shows them,
+   because browsing takes several steps; only an action that puts you on
+   a page (open a note, create one, print) closes it. The reason is the
+   brief — "me and the page, with the ability to swap to other pages
+   easily" — and a sidebar is permanently-visible furniture that competes
+   with the writing for attention and width.
 
 ## Open questions
 
@@ -101,16 +114,16 @@ are the part that ages.
 
 | Phase | Goal | New deps | Schema | Notes |
 | --- | --- | --- | --- | --- |
-| 0 | Repo scaffold: configs, CI, plans, theme, layout | svelte, tauri CLI (all installed up front) | — | Unblocks everything |
-| 1 | Port the pure libs + their tests from useful | — | — | Mechanical; unit suite green |
-| 2 | Paper design system: theme.css, global.css, Layout | — | — | Token names = useful's |
-| 3 | Vault storage: types, frontmatter, fs model, sqlite worker store, memory store, prefs | @sqlite.org/sqlite-wasm, yaml | **v1** `files`, `assets`, `meta` | The one real schema |
-| 4 | App shell: sidebar (notebooks + pile), page header (title left, frontmatter right, red rule), open/edit/autosave | — | — | **CHECKPOINT A** after this |
-| 5 | Editor stack port: 3 faces, footnotes, diagrams, drawings, images, math | milkdown, codemirror, mermaid, katex, excalidraw+react | — | Largest phase |
-| 6 | Links, tags, search: backlinks panel, rename/alias offer, fulltext search + `tag:` filter, quick switcher, bulk ops | — | — | **CHECKPOINT B** after this |
-| 7 | Export (MD / self-contained HTML / print-PDF) + blank-document preference + settings page | — | — | |
-| 8 | PWA: manifest, service worker, vendored math/drawing fonts; Playwright harness + specs | — | — | **CHECKPOINT C** after this |
-| 9 | Tauri build: src-tauri, fs store, packaging; docs; release polish | @tauri-apps/* | — | Final checkpoint = release gate |
+| 0 | Repo scaffold: configs, CI, plans, theme, layout | svelte, tauri CLI (all installed up front) | — | **DONE.** Unblocks everything |
+| 1 | Port the pure libs + their tests from useful | — | — | **DONE.** Mechanical; unit suite green |
+| 2 | Paper design system: theme.css, global.css, Layout | — | — | **DONE.** Token names = useful's |
+| 3 | Vault storage: types, frontmatter, fs model, sqlite worker store, memory store, prefs | @sqlite.org/sqlite-wasm, yaml | **v1** `files`, `meta` | **DONE.** Assets are rows in `files` |
+| 4 | The page: title left, frontmatter right, red rule, open/edit/autosave | — | — | **DONE.** Its sidebar was later removed |
+| 5 | Editor stack port: 3 faces, footnotes, diagrams, drawings, images, math | milkdown, codemirror, mermaid, katex, excalidraw+react | — | **DONE.** Largest phase |
+| 6 | Links, tags, search: backlinks, rename/alias offer, fulltext search + `tag:` filter, the Ctrl+K palette, bulk ops | — | — | **DONE.** Plus the palette rework |
+| 7 | Export (MD / self-contained HTML / print-PDF) + blank-document preference + settings page | — | — | **DONE.** Blank is the default |
+| 8 | PWA: manifest, service worker, vendored math/drawing fonts; Playwright harness + specs | — | — | **DONE.** 28 cases |
+| 9 | Tauri build: src-tauri, fs store, packaging; docs; release polish | @tauri-apps/* | — | **DONE.** `cargo check` green; installer not yet cut |
 
 ## Phase 0 — Scaffold
 
@@ -198,9 +211,9 @@ exercised by Playwright later.
 have it save.
 
 **Scope:**
-1. `NoteyApp.svelte`: vault load into the in-memory model; sidebar with
-   notebook sections + Pile + New note / New notebook; note rows with
-   open/child/delete affordances.
+1. `NoteyApp.svelte`: vault load into the in-memory model; the page
+   itself (there is no sidebar — see decision 10); the book button that
+   opens the palette.
 2. The page: title input (left) and frontmatter block (right) above the red
    rule; tags field; breadcrumb; autosave chain (editor debounce → 400 ms
    save → flush on pagehide/visibility/switch — useful's invariants:
@@ -246,9 +259,13 @@ backlinks, rename offers, search, filtering, quick switching, bulk ops.
 3. Rename → alias push + "N notes still link to … / Update them" offer.
 4. Search: fulltext over titles/tags/bodies with result snippets; `tag:foo`
    filter syntax; clicking a tag chip searches it.
-5. Quick switcher (Ctrl+K/Ctrl+P): fuzzy over titles + paths.
-6. Bulk operations: select many in the sidebar → export zip / add-remove
-   tags / move / delete (reparent semantics from useful's bulk.ts).
+5. The **command palette** (Ctrl+K / Ctrl+P, or the book): fuzzy over
+   commands and notes, plus the library views — notebooks, one notebook,
+   the Pile, this note's links — that keep you in the palette while you
+   browse (decision 10).
+6. Bulk operations: tick notes in a palette list view → export zip /
+   add-remove tags / move / delete (reparent semantics from useful's
+   bulk.ts).
 
 > ### CHECKPOINT B
 > Unit suite green; manual sweep of linking/search/bulk flows.
@@ -320,7 +337,8 @@ backlinks, rename offers, search, filtering, quick switching, bulk ops.
   envelope is the escape hatch.
 - **A Tauri vault picker** — fixed `$DOCUMENT/Notey` first (decision 8).
 - **FTS5 search** — JS scan is instant at this scale (decision 5).
-- **Mobile layout polish** — the sidebar collapses and the page is fluid,
-  but phone-first ergonomics are a later version.
+- **Mobile layout polish** — the page goes fluid under 56rem and the
+  palette is reachable, but phone-first ergonomics (no keyboard, no
+  Ctrl+K) are a later version.
 - **The trust-gate reporter** — useful's sabotage-detecting test reporter is
   deferred; the isolated-delta assertions come without it.

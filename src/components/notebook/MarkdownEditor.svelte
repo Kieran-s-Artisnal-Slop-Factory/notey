@@ -155,7 +155,7 @@
     /** Which view to open in. */
     mode: initialMode = 'wysiwyg',
     /** Minimum height of the editing surface. */
-    minHeight = '18rem',
+    minHeight = '90vh',
     /** Whether `[[Title]]` resolves to a note; unresolved links offer to create one. */
     wikiExists = undefined,
     /** The href a `[[Title]]` points at. Defaults to the notebook route. */
@@ -1280,6 +1280,26 @@
     else if (initialMode === 'source') mountCodeMirror();
   });
 
+  /**
+   * Alt+0 is claimed on the CAPTURE phase of the editor root, not with an
+   * onkeydown on the element. A real keypress inside the ProseMirror canvas
+   * never reached that handler — the editors consume Alt-combinations on the
+   * way up (a synthetic event still arrived, which is what made this look
+   * like it worked). Capture runs before either editor sees the key, which
+   * is the right place for a shortcut this component owns anyway.
+   */
+  function onRootKeydown(event: KeyboardEvent): void {
+    if (footnotesOpen || !isFootnoteKey(event)) return;
+    event.preventDefault();
+    event.stopPropagation();
+    toggleFootnotes();
+  }
+
+  onMount(() => {
+    root?.addEventListener('keydown', onRootKeydown, true);
+    return () => root?.removeEventListener('keydown', onRootKeydown, true);
+  });
+
   onDestroy(() => {
     void destroyEditor();
   });
@@ -1290,13 +1310,6 @@
   class="editor"
   data-testid="notebook-editor"
   style={`--editor-min-height: ${minHeight}`}
-  onkeydown={(event) => {
-    // Both editors let the key bubble; the dialog has its own handler, and
-    // owns the shortcut while it is open.
-    if (footnotesOpen || !isFootnoteKey(event)) return;
-    event.preventDefault();
-    toggleFootnotes();
-  }}
 >
   <div class="editor-toolbar" role="toolbar" aria-label="Editor tools">
     <button
@@ -1339,7 +1352,9 @@
       title="Rich editing"
       onclick={() => void setMode('wysiwyg')}
     >
-      Edit
+      <svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" fill="currentColor" class="bi bi-pencil-fill" viewBox="-3 -6 24 24">
+        <path d="M12.854.146a.5.5 0 0 0-.707 0L10.5 1.793 14.207 5.5l1.647-1.646a.5.5 0 0 0 0-.708zm.646 6.061L9.793 2.5 3.293 9H3.5a.5.5 0 0 1 .5.5v.5h.5a.5.5 0 0 1 .5.5v.5h.5a.5.5 0 0 1 .5.5v.5h.5a.5.5 0 0 1 .5.5v.207zm-7.468 7.468A.5.5 0 0 1 6 13.5V13h-.5a.5.5 0 0 1-.5-.5V12h-.5a.5.5 0 0 1-.5-.5V11h-.5a.5.5 0 0 1-.5-.5V10h-.5a.5.5 0 0 1-.175-.032l-.179.178a.5.5 0 0 0-.11.168l-2 5a.5.5 0 0 0 .65.65l5-2a.5.5 0 0 0 .168-.11z"/>
+      </svg>
     </button>
     <button
       type="button"
@@ -1349,7 +1364,9 @@
       title="Raw markdown"
       onclick={() => void setMode('source')}
     >
-      Source
+      <svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" fill="currentColor" class="bi bi-markdown-fill" viewBox="-3 -6 24 24">
+  <path d="M0 4a2 2 0 0 1 2-2h12a2 2 0 0 1 2 2v8a2 2 0 0 1-2 2H2a2 2 0 0 1-2-2zm11.5 1a.5.5 0 0 0-.5.5v3.793L9.854 8.146a.5.5 0 1 0-.708.708l2 2a.5.5 0 0 0 .708 0l2-2a.5.5 0 0 0-.708-.708L12 9.293V5.5a.5.5 0 0 0-.5-.5M3.56 7.01h.056l1.428 3.239h.774l1.42-3.24h.056V11h1.073V5.001h-1.2l-1.71 3.894h-.039l-1.71-3.894H2.5V11h1.06z"/>
+</svg>
     </button>
     <button
       type="button"
@@ -1359,7 +1376,9 @@
       title="How the note renders"
       onclick={() => void setMode('preview')}
     >
-      Preview
+      <svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" fill="currentColor" class="bi bi-book-fill" viewBox="-3 -6 24 24">
+  <path d="M8 1.783C7.015.936 5.587.81 4.287.94c-1.514.153-3.042.672-3.994 1.105A.5.5 0 0 0 0 2.5v11a.5.5 0 0 0 .707.455c.882-.4 2.303-.881 3.68-1.02 1.409-.142 2.59.087 3.223.877a.5.5 0 0 0 .78 0c.633-.79 1.814-1.019 3.222-.877 1.378.139 2.8.62 3.681 1.02A.5.5 0 0 0 16 13.5v-11a.5.5 0 0 0-.293-.455c-.952-.433-2.48-.952-3.994-1.105C10.413.809 8.985.936 8 1.783"/>
+</svg>
     </button>
   </div>
 
@@ -1425,14 +1444,14 @@
 
 <style>
   .editor {
-    border: 1px solid var(--border-strong-color);
+    /* border: 1px solid var(--border-strong-color); */
     border-radius: var(--radius-md);
     background: var(--surface-color);
     overflow: hidden;
 
     /* The retoken token set the ported CSS reads, on the blueprint palette.
        Defined here, at the root, so both editors and their popups share it. */
-    --editor-bg: var(--bg-color);
+    --editor-bg: "";
     --editor-cursor: var(--color-stamp);
     --editor-active-line: var(--color-primary-soft);
     --editor-selection: var(--color-primary-soft);
@@ -1451,7 +1470,10 @@
     --syntax-name: var(--text-color);
   }
 
+
+
   .editor-toolbar {
+    position: sticky;
     display: flex;
     align-items: center;
     gap: var(--space-1);
@@ -1587,7 +1609,7 @@
 
   .preview-pane {
     padding: var(--space-4);
-    background: var(--bg-color);
+    /* background: var(--bg-color); */
     min-height: var(--editor-min-height);
   }
 

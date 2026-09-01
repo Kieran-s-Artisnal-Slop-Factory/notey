@@ -45,19 +45,14 @@ const swPath = href('/sw.js');
       import { installTestHookIfEnabled } from '../lib/testMode';
       installTestHookIfEnabled();
     </script>
-    <header class="topbar" data-print="hide">
+    <!-- The only chrome above the page: a letterhead that is also the way
+         home. Everything else lives behind Ctrl+K. -->
+    <!-- <header class="topbar" data-print="hide">
       <a class="brand" href={href('/')}>
         <span class="brand-name">NOTEY</span>
-        <span class="brand-sub">notes on paper</span>
+        <span class="brand-sub">{isPath(currentPath, '/settings/') ? 'settings' : 'notes on paper'}</span>
       </a>
-      <nav class="row">
-        <a class:list={['nav-link', { current: isPath(currentPath, '/') }]} href={href('/')}>Notes</a>
-        <a
-          class:list={['nav-link', { current: isPath(currentPath, '/settings/') }]}
-          href={href('/settings/')}>Settings</a
-        >
-      </nav>
-    </header>
+    </header> -->
     <main class="page">
       <slot />
     </main>
@@ -125,25 +120,6 @@ const swPath = href('/sw.js');
     font-size: var(--font-size-eyebrow);
     letter-spacing: var(--tracking-wide);
     color: var(--text-muted-color);
-  }
-
-  .nav-link {
-    font-size: var(--font-size-eyebrow);
-    letter-spacing: var(--tracking-label);
-    text-transform: uppercase;
-    font-weight: 700;
-    text-decoration: none;
-    color: var(--text-muted-color);
-    padding: var(--space-1) var(--space-2);
-  }
-
-  .nav-link.current {
-    color: var(--color-stamp);
-    border-bottom: 2px solid var(--color-stamp);
-  }
-
-  .nav-link:hover {
-    color: var(--text-color);
   }
 
   .page {

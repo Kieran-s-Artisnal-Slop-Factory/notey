@@ -21,7 +21,9 @@ export interface Prefs {
 }
 
 const DEFAULTS: Prefs = {
-  startup: 'last',
+  // Blank by default: notey opens as a page you can write on, not as a
+  // file manager. The last note is one Ctrl+K away.
+  startup: 'blank',
   mode: 'wysiwyg',
   lastNote: null,
   theme: 'system',
@@ -40,7 +42,7 @@ export function loadPrefs(): Prefs {
     if (!raw) return { ...DEFAULTS };
     const parsed = JSON.parse(raw) as Partial<Prefs>;
     return {
-      startup: parsed.startup === 'blank' ? 'blank' : 'last',
+      startup: parsed.startup === 'last' ? 'last' : 'blank',
       mode: parsed.mode === 'source' || parsed.mode === 'preview' ? parsed.mode : 'wysiwyg',
       lastNote: typeof parsed.lastNote === 'string' ? parsed.lastNote : null,
       theme: parsed.theme === 'light' || parsed.theme === 'dark' ? parsed.theme : 'system',
@@ -69,18 +71,32 @@ export function applyTheme(theme: ThemeChoice): void {
   document.documentElement.style.colorScheme = theme === 'system' ? '' : theme;
 }
 
-export function loadScratch(): string {
+/** The unfiled page: a title and a body, kept only in this browser. */
+export interface Scratch {
+  title: string;
+  body: string;
+}
+
+export function loadScratch(): Scratch {
   try {
-    return localStorage.getItem(SCRATCH_KEY) ?? '';
+    const raw = localStorage.getItem(SCRATCH_KEY);
+    if (!raw) return { title: '', body: '' };
+    // Pre-0.1.0 scratches were a bare body string.
+    if (!raw.startsWith('{')) return { title: '', body: raw };
+    const parsed = JSON.parse(raw) as Partial<Scratch>;
+    return {
+      title: typeof parsed.title === 'string' ? parsed.title : '',
+      body: typeof parsed.body === 'string' ? parsed.body : '',
+    };
   } catch {
-    return '';
+    return { title: '', body: '' };
   }
 }
 
-export function saveScratch(text: string): void {
+export function saveScratch(scratch: Scratch): void {
   try {
-    if (text === '') localStorage.removeItem(SCRATCH_KEY);
-    else localStorage.setItem(SCRATCH_KEY, text);
+    if (scratch.title === '' && scratch.body === '') localStorage.removeItem(SCRATCH_KEY);
+    else localStorage.setItem(SCRATCH_KEY, JSON.stringify(scratch));
   } catch {
     // Best-effort; the scratch buffer is a convenience, not vault data.
   }

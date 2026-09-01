@@ -65,6 +65,7 @@
    * `renameFootnote` / `removeFootnote`, which is why they are one operation
    * each rather than two.
    */
+  import { onMount } from 'svelte';
   import { slugifyLabel } from '../../lib/notebook/footnotes';
 
   let {
@@ -187,7 +188,24 @@
     );
   }
 
+  /*
+   * The keystroke that OPENED this dialog is still being dispatched when
+   * the window listener below is registered: Svelte flushes the mount at
+   * the end of the delegated handler, and window is visited after the
+   * document, so that very Alt+0 would reach onKey and close the dialog
+   * on the frame it opened — it never even painted. A timer, not a
+   * timestamp: a task boundary is the one thing guaranteed to be after
+   * the current dispatch, and event.timeStamp does not share an epoch
+   * with performance.now() for synthesized keys.
+   */
+  let armed = $state(false);
+  onMount(() => {
+    const id = setTimeout(() => (armed = true), 0);
+    return () => clearTimeout(id);
+  });
+
   function onKey(event: KeyboardEvent) {
+    if (!armed) return;
     if (event.key === 'Escape') {
       onCancel();
       return;

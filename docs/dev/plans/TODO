@@ -28,14 +28,17 @@ Additional things to keep in mind:
 
 - [x] Phase 0 — scaffold (configs, CI, plans, launch, VERSION/CHANGELOG)
 - [x] Phase 1 — pure libs ported from useful with tests green (275 unit tests)
-- [ ] Phase 2 — paper design system (theme, global, Layout)
-- [ ] Phase 3 — vault storage (frontmatter, fs model, sqlite worker, prefs)
-- [ ] Phase 4 — app shell (sidebar, page header, autosave) — CHECKPOINT A
-- [ ] Phase 5 — editor stack (3 faces, footnotes, diagrams, drawings, math)
-- [ ] Phase 6 — links, tags, search, quick switcher, bulk ops — CHECKPOINT B
-- [ ] Phase 7 — export (MD/HTML/print), blank-doc preference, settings
-- [ ] Phase 8 — PWA (manifest, sw.js) + Playwright harness — CHECKPOINT C
-- [ ] Phase 9 — Tauri build, docs trees, README, release polish
+- [x] Phase 2 — paper design system (theme, global, Layout)
+- [x] Phase 3 — vault storage (frontmatter, fs model, sqlite worker, prefs)
+- [x] Phase 4 — the page (title, frontmatter, red rule, autosave) — CHECKPOINT A
+- [x] Phase 5 — editor stack (3 faces, footnotes, diagrams, drawings, math)
+- [x] Phase 6 — links, tags, search, the Ctrl+K palette, bulk ops — CHECKPOINT B
+- [x] Phase 7 — export (MD/HTML/print), blank-page default, settings
+- [x] Phase 8 — PWA (manifest, sw.js) + Playwright harness — CHECKPOINT C
+- [x] Phase 9 — Tauri build, docs trees, README, release polish
+- [x] UI rework (asked for mid-build): no sidebar, the book, the 8x11 page,
+      blank-first, everything through Ctrl+K — decision 10 in the phased plan
+- [x] 288 unit tests + 28 Playwright cases green against the production build
 
 ## For human
 
@@ -44,6 +47,13 @@ free to add to this
 
 - [ ] Review the paper palette in a real browser (tokens in src/styles/theme.css)
 - [ ] Decide whether the Tauri vault should get a folder picker in 0.2.0
+- [ ] Three bugs were fixed in code ported from useful and are worth carrying
+      back upstream: Alt+0 never reached the editor for a real keypress; the
+      footnote dialog closed on the keystroke that opened it; the editor was
+      keyed on the note path so a rename rebuilt it mid-typing. See the
+      CHANGELOG's Bug Fixes.
+- [ ] Run `npm run tauri:build` once on this machine to produce an installer
+      (cargo check passes; the full bundle has not been run)
 
 ## Per change
 Required guidence to follow per change

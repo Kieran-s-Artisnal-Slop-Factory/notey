@@ -4,6 +4,7 @@
    * the vault lives (backend tier, size, persistent-storage state).
    */
   import { onMount } from 'svelte';
+  import { href } from '../lib/paths';
   import { applyTheme, loadPrefs, savePrefs, type StartupMode, type ThemeChoice } from '../lib/prefs';
   import { requestPersistentStorage, storageEstimate, type PersistState } from '../lib/persistence';
   import { openVaultStore } from '../lib/vault/store';
@@ -54,20 +55,24 @@
 
 <div class="settings stack">
   <section class="card stack">
-    <h1 class="eyebrow eyebrow-stamp">Settings</h1>
+    <div class="row">
+      <h1 class="eyebrow eyebrow-stamp">Settings</h1>
+      <span class="spacer"></span>
+      <a class="btn btn-sm" href={href('/')} data-testid="notey-back">‹ Back to the page</a>
+    </div>
 
     <h2>Opening the app</h2>
-    <label class="choice">
-      <input type="radio" name="startup" checked={startup === 'last'} onchange={() => setStartup('last')} data-testid="notey-startup-last" />
-      Reopen the note I had open
-    </label>
     <label class="choice">
       <input type="radio" name="startup" checked={startup === 'blank'} onchange={() => setStartup('blank')} data-testid="notey-startup-blank" />
       Open to a blank page with no file yet
     </label>
+    <label class="choice">
+      <input type="radio" name="startup" checked={startup === 'last'} onchange={() => setStartup('last')} data-testid="notey-startup-last" />
+      Reopen the note I had open
+    </label>
     <p class="muted">
-      The blank page is a scratch buffer in this browser — “File this note” turns it into a real
-      note in the Pile.
+      The blank page is a scratch buffer in this browser — it keeps what you type across reloads,
+      and <strong>File this note</strong> in the Ctrl+K menu turns it into a real note.
     </p>
 
     <h2>Theme</h2>
@@ -127,6 +132,10 @@
     align-items: center;
     gap: var(--space-2);
     cursor: pointer;
+  }
+
+  .spacer {
+    flex: 1;
   }
 
   input[type='radio'] {

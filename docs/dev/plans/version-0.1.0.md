@@ -7,9 +7,12 @@ where the two disagree, that file is the later thought.
 ## The app
 
 - [ ] A note-taking PWA that feels like writing on paper inside a notebook
-  - [ ] Sidebar of **notebooks** (folders) holding the files and folders you specify
+  - [ ] **Notebooks** (folders) holding the files and folders you specify
   - [ ] A **pile** — a general section for loose, individual notes
   - [ ] Minimal design: me and the page, with easy switching to other pages
+    - [ ] No sidebar at all — a closed book in the corner opens the library
+    - [ ] The page is an 8 x 11 sheet, and starts blank and uncommitted
+    - [ ] Every control and every navigation runs through the Ctrl+K menu
   - [ ] Frontmatter above the red line on the right, title on the left
     (index-card layout, per the design inspiration)
 
