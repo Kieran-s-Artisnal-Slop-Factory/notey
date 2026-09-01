@@ -12,36 +12,85 @@ _Describes the code as of v0.1.0 (unreleased; schema v1) — verify against sour
 
 | Path | Role |
 | --- | --- |
-| [src/styles/theme.css](../../src/styles/theme.css) | Every design token, both themes, in one `:root` |
+| [src/styles/theme.css](../../src/styles/theme.css) | Every design token: the scale, the papers, the desks, the pens |
 | [src/styles/global.css](../../src/styles/global.css) | Reset, base elements, utility classes, `.prose`, Prism inks, print |
 | [public/fonts/](../../public/fonts/) | Courier Prime, vendored, with `PROVENANCE.txt` |
-| [src/layouts/Layout.astro](../../src/layouts/Layout.astro) | The pre-paint theme pin |
-| [src/lib/prefs.ts](../../src/lib/prefs.ts) | `applyTheme` and the stored choice |
+| [src/layouts/Layout.astro](../../src/layouts/Layout.astro) | The pre-paint look script |
+| [src/lib/prefs.ts](../../src/lib/prefs.ts) | `applyLook`, the swatch lists, the stored choices |
+| [src/components/SettingsPanel.svelte](../../src/components/SettingsPanel.svelte) | Where the choices are made — inside the palette |
 
-## Two sheets
+## Three independent choices
 
-One `:root` block using `light-dark()`, with `color-scheme: light dark`.
-There is no `[data-theme]` attribute anywhere: a manual choice is applied by
-pinning `document.documentElement.style.colorScheme`.
+Three attributes on `<html>`, set before first paint by the script in
+`Layout.astro` and re-applied by `prefs.applyLook` when a setting changes:
 
-- **light** — typewriter ink on cream card stock, on an aged-paper desk.
-- **dark** — the same desk by lamplight: everything warm and dimmed, never
-  cold slate.
+| Attribute | Chooses | Values |
+| --- | --- | --- |
+| `data-page` | the **paper** — the sheet, its ink, and the chrome that must stay legible on it | `light`, `dark` |
+| `data-desk` | the **desk** the sheet lies on | `plain-light`, `plain-dark`, `wood-mahogany`, `wood-oak`, `wood-birch`, `leather-black`, `leather-rich`, `leather-tan`, `leather-cream` |
+| `data-accent` | the **pen** — buttons, links, focus | `ink`, `oxblood`, `forest`, `teal`, `aubergine`, `rust`, `slate`, `moss` |
+
+They are independent because "the page is light" and "the desk is dark" have
+to be sayable at the same time. That is why nothing uses `light-dark()` any
+more: one function cannot answer two questions.
+
+`system` for either resolves at boot — the paper from
+`prefers-color-scheme`, the desk to the plain one that matches it.
+
+## Paper and desk are different surfaces
+
+- Paper tokens (`--surface-color`, `--text-color`, `--border-color`, the
+  feedback colours, the shadows) live in the `[data-page]` blocks. The
+  palette, dialogs and inputs all sit on paper, so they follow it.
+- Desk tokens live in the `[data-desk]` blocks: `--bg-color` (a flat colour
+  anything can paint over itself to be certain of its background),
+  `--desk-layers` / `--desk-blend` / `--desk-size` (the texture, painted on
+  `body` only), and `--desk-ink` / `--desk-ink-muted` for the few things
+  that sit **out on the desk** rather than on the page — the book and the
+  boot line. A light page on a dark desk would otherwise hide them.
+
+## The textures are generated, not downloaded
+
+`--tex-grain`, `--tex-knot`, `--tex-pebble` and `--tex-creases` are inline
+SVG data URIs built from `feTurbulence`. Two ideas do all the work:
+
+- **Wood**: turbulence stretched along one axis (`baseFrequency: 0.55 0.008`)
+  makes long streaks. The grain must run the same way as the plank lines
+  over it, or the result reads as corrugated iron — that was the first
+  attempt.
+- **Leather**: `feDiffuseLighting` over turbulence lights a noise field from
+  one side, which is what makes a surface look pebbled rather than noisy. A
+  `feComponentTransfer` pass adds the contrast that makes it read at a
+  glance.
+
+Each desk stacks those greys over a colour with `background-blend-mode`, so
+one tile dresses every variant. `background-attachment: fixed` keeps the
+desk still while the page scrolls.
+
+**The palette never sits on a texture.** Its panel is `--surface-raised-color`
+— a solid paper colour — so legibility does not depend on which desk is
+underneath.
 
 ## Three inks and a stamp
 
-| Role | Token | Light | Dark |
+| Role | Token | Light paper | Dark paper |
 | --- | --- | --- | --- |
 | Ink — what the typewriter left | `--text-color` | `#221e16` | `#e8e1cd` |
 | Pencil — annotations | `--text-muted-color` | `#6f654c` | `#a89c7d` |
-| Pen — links and actions | `--color-primary` | `#28439c` | `#9db1ee` |
+| Pen — links and actions | `--color-primary` | the accent | the accent, lifted toward the ink |
 | Stamp — the red rule, eyebrows, focus | `--color-stamp` | `#a8352c` | `#cf7466` |
 
-Surfaces are the desk (`--bg-color`), the page (`--surface-color`) and a card
-lifted off it (`--surface-raised-color`). Lines come in two weights:
-`--border-color` is decorative, `--border-strong-color` identifies a control.
-Feedback (`--color-success`, `--color-danger`, `--color-warning`) is never the
-stamp red — feedback must not read as brand.
+The pen is the one the reader picks. Each swatch supplies only
+`--accent-base` and `--accent-on`; `--color-primary-strong` and
+`--color-primary-soft` are mixed from it and the paper with `color-mix`, so
+eight swatches times two papers is sixteen coherent palettes from sixteen
+numbers. On dark paper the base is mixed 52% toward the ink, because a pen
+chosen for paper is a bruise under lamplight.
+
+Lines come in two weights: `--border-color` is decorative,
+`--border-strong-color` identifies a control. Feedback
+(`--color-success`, `--color-danger`, `--color-warning`) is never the stamp
+red — feedback must not read as brand.
 
 Two tokens are notey's own: `--rule-color` (the red rule, an alias of the
 stamp) and `--ruled-line-color` (the faint blue of a printed pad).
@@ -86,20 +135,20 @@ The ported components assume these exist: `.btn`, `.btn-primary`,
 `.token.*` Prism inks, and the `[data-print="hide"]` print rule. Changing a
 name here breaks the editor stack silently — add, do not rename.
 
-## The theme pin
+## Applying a choice
 
 ```mermaid
 flowchart LR
-  A[Settings: System / Paper / Lamplight] --> B[savePrefs]
-  B --> C[localStorage notey-theme]
-  B --> D[applyTheme: documentElement.style.colorScheme]
+  A[Settings, in the palette] --> B[savePrefs]
+  B --> C[localStorage: notey-page, notey-desk, notey-accent]
+  B --> D[applyLook: data-page, data-desk, data-accent on html]
   C --> E[Layout.astro inline script, before first paint]
   E --> D
 ```
 
-The inline script runs before anything renders, so there is no flash of the
-wrong sheet. "System" removes the key and clears the inline style, which
-hands the choice back to `light-dark()`.
+The three mirrors are bare strings rather than the preferences blob, so the
+pre-paint script is a few lines and cannot throw on a half-written value.
+It runs before anything renders, so there is no flash of the wrong paper.
 
 ## Fonts
 
@@ -115,6 +164,11 @@ service worker keeps them in a bucket that survives a cache version bump.
   by size and weight, not by family.
 - **Contrast is checked by eye, not by a sweep.** useful has an automated
   a11y contrast test; notey does not yet — usability first, per the plan.
+  With eight pens times two papers the combinations now outrun the eye, so
+  this is the first thing to automate.
+- **A textured desk is a few hundred KB of filter work at paint time.** It
+  is painted once on `body` with `background-attachment: fixed`; scrolling
+  does not re-run it. Plain desks cost nothing.
 - **`--sidebar-width` survives with no sidebar** because ported components
   still read it. Harmless, and removing it means editing files that are
   otherwise verbatim.

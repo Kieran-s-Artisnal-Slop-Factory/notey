@@ -53,7 +53,13 @@
   import type { FolderEntry, Note, VaultStore } from '../lib/vault/types';
   import { loadPrefs, loadScratch, savePrefs, saveScratch, type EditorMode } from '../lib/prefs';
 
-  const SAVE_DEBOUNCE_MS = 400;
+  /*
+   * Long enough that ordinary typing is one write rather than twenty. The
+   * editor's own debounce (150 ms) sits in front of this, and a flush on
+   * blur, switch, export or pagehide means nothing waits on the timer to
+   * be safe.
+   */
+  const SAVE_DEBOUNCE_MS = 1500;
 
   /*
    * Read once, at script init. This island is client:only, so localStorage
@@ -121,6 +127,13 @@
    */
   let mountPath: string | null = null;
   let mountIsScratch = true;
+  /*
+   * Notes created in this session that have never been deliberately named.
+   * Renaming one is not a rename — it is the first naming — so it must not
+   * leave an alias behind, or every note that started life as `Untitled`
+   * answers to `Untitled` forever and clutters every [[link]] search.
+   */
+  const unnamed = new Set<string>();
 
   /* ── autosave ──────────────────────────────────────────────────────── */
   let saveState = $state<'saved' | 'saving' | 'error' | null>(null);
@@ -254,6 +267,7 @@
     exportNote = null;
     saveState = null;
     missingLink = null;
+    titleDirty = false;
     try {
       if (!store) return;
       const assets = noteAssetStore(store, note.id);
@@ -323,6 +337,7 @@
         updated_at: now,
       };
       await store.write({ path, kind: 'note', content: noteContentOf(note) });
+      unnamed.add(path);
       await refreshFromRows();
       const created = notes.find((n) => n.id === path);
       if (created) await openNote(created);
@@ -390,6 +405,35 @@
     flash(folder ? `Filed in ${folder}.` : 'Filed in the Pile.');
   }
 
+  /*
+   * The title is the filename, so committing it renames a file and can
+   * leave an alias behind. Doing that per keystroke turns every typo into
+   * a rename and memorialises the misspellings; it commits on blur or
+   * Enter instead (Escape puts back the saved one). A flush still writes
+   * whatever is in the field, so nothing is lost by not blurring.
+   */
+  let titleDirty = $state(false);
+
+  function onTitleInput(): void {
+    titleDirty = true;
+    if (scratchOpen) saveScratch({ title, body });
+  }
+
+  function commitTitle(): void {
+    if (!titleDirty) return;
+    titleDirty = false;
+    if (scratchOpen) {
+      saveScratch({ title, body });
+      return;
+    }
+    // A commit is deliberate — leaving the field IS the decision — so it
+    // writes now rather than waiting out the typing debounce.
+    clearTimeout(saveTimer);
+    saveTimer = undefined;
+    saveState = 'saving';
+    void doSave();
+  }
+
   /* ── autosave ──────────────────────────────────────────────────────── */
   function scheduleSave(): void {
     if (scratchOpen) {
@@ -404,6 +448,16 @@
 
   async function flushSave(): Promise<void> {
     editor?.flush();
+    // A title typed but not yet blurred still has to reach the file.
+    if (titleDirty) {
+      titleDirty = false;
+      if (!scratchOpen && currentPath) {
+        clearTimeout(saveTimer);
+        saveTimer = undefined;
+        await doSave();
+        return;
+      }
+    }
     if (scratchOpen) {
       saveScratch({ title, body });
       return;
@@ -447,7 +501,15 @@
 
     const oldTitle = savedTitle.trim();
     const nextTitleRaw = title.trim() || 'Untitled';
-    const renames = oldTitle !== '' && oldTitle.toLowerCase() !== 'untitled' && nextTitleRaw !== oldTitle;
+    /*
+     * A rename worth remembering is one where the OLD name was a name —
+     * something another note might have linked to. A note that was still
+     * `Untitled` (or `Untitled 2`, which is what the second one is called)
+     * is being named for the first time, and leaves no alias behind.
+     */
+    const wasNamed =
+      oldTitle !== '' && !/^untitled(\s+\d+)?$/i.test(oldTitle) && !unnamed.has(id);
+    const renames = wasNamed && nextTitleRaw !== oldTitle;
     const nextAliases = renames
       ? [...new Set([...aliases, oldTitle])].filter((a) => a.toLowerCase() !== nextTitleRaw.toLowerCase())
       : aliases;
@@ -494,6 +556,13 @@
       updatedAt = now;
       createdAt = note.created_at;
       saveState = 'saved';
+      // It has a name of its own now, so the next rename is a real one.
+      if (!/^untitled(\s+\d+)?$/i.test(nextTitleRaw)) {
+        unnamed.delete(id);
+        unnamed.delete(targetPath);
+      } else if (unnamed.has(id)) {
+        unnamed.add(targetPath);
+      }
       savePrefs({ lastNote: targetPath });
       if (targetPath !== id && assetStore && store) {
         const assets = noteAssetStore(store, targetPath);
@@ -950,7 +1019,7 @@
               {/each}
             </nav>
           {:else if !scratchOpen}
-            <p class="eyebrow">The Pile</p>
+            <p class="eyebrow"></p>
           {/if}
           <input
             class="title-input"
@@ -961,7 +1030,19 @@
             bind:this={titleField}
             bind:value={title}
             disabled={switching}
-            oninput={scheduleSave}
+            oninput={onTitleInput}
+            onblur={commitTitle}
+            onkeydown={(event) => {
+              if (event.key === 'Enter') {
+                event.preventDefault();
+                (event.currentTarget as HTMLInputElement).blur();
+              } else if (event.key === 'Escape') {
+                event.preventDefault();
+                title = savedTitle;
+                titleDirty = false;
+                (event.currentTarget as HTMLInputElement).blur();
+              }
+            }}
           />
           {#if aliases.length > 0}
             <p class="muted aliases" data-testid="notebook-aliases">
@@ -1088,7 +1169,7 @@
             {wikiExists}
             {wikiHref}
             onWikiNavigate={navigateWiki}
-            placeholder="Press Ctrl+K for commands, or just start typing."
+            placeholder="Press Ctrl+K for commands, or just start typing (/ for special blocks)."
             minHeight="20rem"
           />
         {/key}
@@ -1112,7 +1193,6 @@
       onFileScratch={(folder) => void fileScratch(folder)}
       onNoteAction={noteAction}
       onBulk={runBulk}
-      onSettings={() => (location.href = href('/settings/'))}
       onClose={() => (paletteOpen = false)}
     />
   {/if}
@@ -1157,13 +1237,13 @@
     background: none;
     padding: 0;
     cursor: pointer;
-    color: var(--text-muted-color);
+    color: var(--desk-ink-muted, var(--text-muted-color));
     transition: color 120ms ease;
   }
 
   .book:hover,
   .book.open {
-    color: var(--color-stamp);
+    color: var(--desk-ink, var(--text-color));
   }
 
   .book svg {
@@ -1199,6 +1279,7 @@
     bottom: var(--space-3);
     left: var(--space-5);
     font-size: var(--font-size-eyebrow);
+    color: var(--desk-ink-muted, var(--text-muted-color));
   }
 
   /* ── the sheet: a page, 8 × 11 ─────────────────────────────────────── */
@@ -1206,10 +1287,13 @@
     --page-width: 120ch;
     width: var(--page-width);
     max-width: 100%;
-    aspect-ratio: 8/11;
-    /* A real page: it is this tall even when empty, and grows past it
-       rather than clipping when the writing runs long. */
-    min-height: calc(var(--page-width) * 11 / 8);
+    /*
+     * A real page: this tall when empty, and TALLER when the writing runs
+     * long. Deliberately min-height and not aspect-ratio — aspect-ratio
+     * gives the box a definite height, which content then overflows
+     * instead of growing, and the writing spills onto the desk.
+     */
+    min-height: min(calc(var(--page-width) * 11 / 8), calc(100vw * 11 / 8));
     background: var(--surface-color);
     border: 1px solid var(--border-color);
     border-radius: var(--radius-sm);
@@ -1409,7 +1493,6 @@
   }
 
   .editor-host {
-    height:100%;
     min-width: 0;
     flex: 1;
     display: flex;

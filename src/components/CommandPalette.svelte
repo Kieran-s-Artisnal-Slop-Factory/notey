@@ -13,6 +13,7 @@
    * the pile, this note's links, and the small inline editors (name a
    * notebook, tag a selection, move a selection).
    */
+  import SettingsPanel from './SettingsPanel.svelte';
   import { fuzzyScore } from '../lib/fuzzy';
   import { displayTitle } from '../lib/notebook/model';
   import { backlinks, findWikiLinks, resolveNote } from '../lib/notebook/wiki';
@@ -20,7 +21,16 @@
   import { nameOf } from '../lib/vault/model';
   import type { FolderEntry, Note } from '../lib/vault/types';
 
-  type View = 'root' | 'notebooks' | 'notebook' | 'pile' | 'links' | 'new-notebook' | 'tag' | 'move';
+  type View =
+    | 'root'
+    | 'notebooks'
+    | 'notebook'
+    | 'pile'
+    | 'links'
+    | 'new-notebook'
+    | 'tag'
+    | 'move'
+    | 'settings';
 
   let {
     notes,
@@ -37,7 +47,6 @@
     onFileScratch,
     onNoteAction,
     onBulk,
-    onSettings,
     onClose,
   }: {
     notes: readonly Note[];
@@ -58,7 +67,6 @@
       paths: string[],
       argument?: string
     ) => Promise<string>;
-    onSettings: () => void;
     onClose: () => void;
   } = $props();
 
@@ -75,6 +83,7 @@
   let receipt = $state<string | null>(null);
   let busy = $state(false);
   let field = $state<HTMLInputElement | undefined>();
+  let panelEl = $state<HTMLDivElement | undefined>();
   let listEl = $state<HTMLUListElement | undefined>();
 
   interface Item {
@@ -83,8 +92,20 @@
     hint?: string;
     /** Rows that can join a selection (notes only). */
     path?: string;
+    /**
+     * A `header` is a section label, not a target: it renders differently,
+     * arrow keys step over it, and Enter can never land on it.
+     */
+    kind?: 'header';
     run: () => void;
   }
+
+  const header = (id: string, label: string): Item => ({
+    id: 'hdr:' + id,
+    label,
+    kind: 'header',
+    run: () => {},
+  });
 
   const close = (): void => onClose();
 
@@ -95,7 +116,8 @@
     query = '';
     active = 0;
     receipt = null;
-    field?.focus();
+    if (field) field.focus();
+    else panelEl?.focus();
   }
 
   /* ── the rows for each view ────────────────────────────────────────── */
@@ -238,10 +260,8 @@
     list.push({
       id: 'cmd:settings',
       label: 'Settings',
-      run: () => {
-        onSettings();
-        close();
-      },
+      hint: 'paper, desk, pen',
+      run: () => go('settings'),
     });
     return list;
   });
@@ -263,7 +283,16 @@
           : searchNotes(notes, parseQuery(q))
               .slice(0, 8)
               .map((hit) => hit.note);
-      return [...scored.map((entry) => entry.item), ...hits.map(noteItem)];
+      // Two lists in one, so label them — a note and a command look alike
+      // at a glance, and the difference decides what Enter will do.
+      const rows: Item[] = [];
+      if (scored.length > 0) {
+        rows.push(header('commands', 'Commands'), ...scored.map((entry) => entry.item));
+      }
+      if (hits.length > 0) {
+        rows.push(header('notes', q === '' ? 'Recent notes' : 'Notes'), ...hits.map(noteItem));
+      }
+      return rows;
     }
 
     const match = (label: string): boolean => q === '' || (fuzzyScore(q, label) ?? -1) >= 0;
@@ -386,6 +415,8 @@
     return [];
   });
 
+  /** The rows a keypress can land on — everything but the headings. */
+  const targets = $derived(items.filter((item) => item.kind !== 'header'));
   const selectable = $derived(items.filter((item) => item.path !== undefined));
   const canSelect = $derived(view === 'pile' || view === 'notebook');
   const moveTargets = $derived(
@@ -400,12 +431,14 @@
     if (view === 'new-notebook') return renaming ? `Rename ${renaming.title}` : 'Name the notebook';
     if (view === 'tag') return `Tag ${selected.size} note${selected.size === 1 ? '' : 's'}`;
     if (view === 'move') return `Move ${selected.size} note${selected.size === 1 ? '' : 's'}`;
+    if (view === 'settings') return 'Settings';
     return null;
   });
 
   $effect(() => {
     void view;
-    field?.focus();
+    if (field) field.focus();
+    else panelEl?.focus();
   });
 
   $effect(() => {
@@ -474,12 +507,20 @@
   }
 
   function onKeydown(event: KeyboardEvent): void {
+    if (view === 'settings') {
+      // A form, not a list: leave every other key to the controls.
+      if (event.key === 'Escape') {
+        event.preventDefault();
+        back();
+      }
+      return;
+    }
     if (event.key === 'Escape') {
       event.preventDefault();
       back();
     } else if (event.key === 'ArrowDown') {
       event.preventDefault();
-      active = Math.min(active + 1, items.length - 1);
+      active = Math.min(active + 1, targets.length - 1);
     } else if (event.key === 'ArrowUp') {
       event.preventDefault();
       active = Math.max(active - 1, 0);
@@ -487,13 +528,13 @@
       event.preventDefault();
       if (view === 'new-notebook') void commitName();
       else if (view === 'tag') void runBulk(event.shiftKey ? 'tag-remove' : 'tag-add', query.trim());
-      else items[active]?.run();
+      else targets[active]?.run();
     } else if (event.key === 'Backspace' && query === '' && view !== 'root') {
       event.preventDefault();
       back();
     } else if (event.key === ' ' && canSelect && event.ctrlKey) {
       // Ctrl+Space ticks the highlighted row without leaving the keyboard.
-      const path = items[active]?.path;
+      const path = targets[active]?.path;
       if (path) {
         event.preventDefault();
         toggleSelected(path);
@@ -510,7 +551,15 @@
     if (e.target === e.currentTarget) close();
   }}
 >
-  <div class="panel" role="dialog" aria-label="Commands">
+  <!-- svelte-ignore a11y_no_noninteractive_element_interactions -->
+  <div
+    class="panel"
+    role="dialog"
+    aria-label="Commands"
+    tabindex="-1"
+    bind:this={panelEl}
+    onkeydown={onKeydown}
+  >
     {#if title}
       <div class="crumb">
         <button class="crumb-back" onclick={back} aria-label="Back">‹</button>
@@ -518,10 +567,10 @@
       </div>
     {/if}
 
+    {#if view !== 'settings'}
     <input
       bind:this={field}
       bind:value={query}
-      onkeydown={onKeydown}
       type="text"
       autocomplete="off"
       spellcheck="false"
@@ -535,6 +584,7 @@
             : 'Filter…'}
       data-testid="notey-palette-input"
     />
+    {/if}
 
     {#if view === 'move'}
       <ul class="results" bind:this={listEl}>
@@ -557,10 +607,16 @@
           ? 'Enter creates it. Escape goes back.'
           : 'Enter adds the tags to the ticked notes; Shift+Enter removes them.'}
       </p>
+    {:else if view === 'settings'}
+      <SettingsPanel />
     {:else}
       <ul class="results" bind:this={listEl}>
-        {#each items as item, i (item.id)}
-          <li class="result-row">
+        {#each items as item (item.id)}
+          {#if item.kind === 'header'}
+            <li class="section" aria-hidden="true">{item.label}</li>
+          {:else}
+            {@const i = targets.indexOf(item)}
+            <li class="result-row">
             {#if canSelect && item.path}
               <input
                 type="checkbox"
@@ -584,7 +640,8 @@
               <span class="row-label">{item.label}</span>
               {#if item.hint}<span class="row-hint">{item.hint}</span>{/if}
             </button>
-          </li>
+            </li>
+          {/if}
         {:else}
           <li class="none muted" data-testid="notey-palette-empty">Nothing here.</li>
         {/each}
@@ -715,6 +772,21 @@
     color: var(--text-muted-color);
     font-size: var(--font-size-eyebrow);
     flex: none;
+  }
+
+  .section {
+    padding: var(--space-3) var(--space-3) var(--space-1);
+    font-size: var(--font-size-eyebrow);
+    letter-spacing: var(--tracking-label);
+    text-transform: uppercase;
+    font-weight: 700;
+    color: var(--text-muted-color);
+    border-bottom: 1px solid var(--border-color);
+    margin-bottom: var(--space-1);
+  }
+
+  .results > .section:first-child {
+    padding-top: var(--space-1);
   }
 
   .none,

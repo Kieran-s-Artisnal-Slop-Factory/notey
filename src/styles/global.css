@@ -21,8 +21,18 @@ html {
   -webkit-text-size-adjust: 100%;
 }
 
+/*
+ * The desk. `--desk-layers` is a stack of procedural textures (theme.css);
+ * `background-attachment: fixed` keeps them still while the page scrolls,
+ * because a desk does not slide about. Anything that must be certain of
+ * its background paints `--bg-color` over the top instead.
+ */
 body {
-  background: var(--bg-color);
+  background-color: var(--bg-color);
+  background-image: var(--desk-layers, none);
+  background-blend-mode: var(--desk-blend, normal);
+  background-size: var(--desk-size, auto);
+  background-attachment: fixed;
   color: var(--text-color);
   font-size: var(--font-size-base);
   min-height: 100dvh;

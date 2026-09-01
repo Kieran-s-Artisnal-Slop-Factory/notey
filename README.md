@@ -27,6 +27,10 @@ desktop program that writes plain `.md` files to a folder you own.
   `book:` filters and a snippet of the matching line.
 - **Exports**: Markdown with images inlined, one self-contained HTML file,
   print to PDF, and a zip of many notes at once.
+- **A desk you choose.** The paper (light or dark), the desk under it
+  (plain, or wood and leather textures generated in CSS rather than
+  downloaded) and the accent colour are three independent settings — a dark
+  desk can hold a light page.
 - **Offline**, installable, and durable — a service worker that precaches the
   shell and crawls the rest in the background.
 

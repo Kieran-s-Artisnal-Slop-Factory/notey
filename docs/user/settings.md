@@ -1,8 +1,9 @@
 # Settings
 
-Three things: how notey opens, how it looks, and the truth about where your
-notes are. Reach it from **Ctrl+K → Settings**; the NOTEY letterhead takes you
-back.
+Four things: how notey opens, what the page is made of, what it lies on, and
+the truth about where your notes are. Press **Ctrl+K → Settings** — it opens
+inside the command palette, so you never leave the page you were writing.
+Escape goes back to the commands.
 
 _Describes the code as of v0.1.0 (unreleased; schema v1) — verify against source when in doubt._
 
@@ -16,11 +17,34 @@ _Describes the code as of v0.1.0 (unreleased; schema v1) — verify against sour
 Either way, a link of the form `?note=Some title` wins: an explicit link is an
 explicit ask.
 
-## Theme
+## The paper
 
-**System**, **Paper** (cream stock, typewriter ink) or **Lamplight** (the same
-desk at night). System follows your OS. The choice is applied before the page
-paints, so there is no flash of the wrong one.
+**System**, **Paper** (cream stock, typewriter ink) or **Lamplight** (the
+same page at night). System follows your OS. The choice is applied before the
+page paints, so there is no flash of the wrong one.
+
+## The desk
+
+What the page lies on — chosen separately from the paper, so a dark desk can
+hold a light page if that is what you want to look at.
+
+- **Match** follows the paper: a plain light desk under light paper, a plain
+  dark one under dark.
+- **Plain** — Paper or Lamplight, flat colour, exactly as notey has always
+  looked.
+- **Wood** — Mahogany, Oak or Birch: grain, growth lines and plank joins.
+- **Leather** — Black, Rich brown, Tan or Cream: a pebbled, lit grain.
+
+The textures are drawn by the browser rather than downloaded, so they cost
+nothing to load, never blur however large your screen is, and work offline
+like everything else.
+
+## The pen
+
+Eight accent colours — Ink, Oxblood, Forest, Teal, Aubergine, Rust, Slate,
+Moss. It colours buttons, links, `[[wiki links]]`, the focus ring and the
+highlighted row in the command palette. The red rule stays red: it is the
+stamp, not the pen.
 
 ## Your vault
 
@@ -45,6 +69,10 @@ using and what you are allowed.
 - **Settings are per device, not per vault.** They live in this browser's
   local storage, so they do not travel with an export and are not shared
   between browsers.
+- **The command palette never sits on the desk texture.** It always paints
+  itself a solid page colour, so it stays readable over the busiest wood.
+- **The desk is decoration only.** Nothing about your notes changes with it,
+  and a Plain desk is the cheapest to draw if you notice any sluggishness.
 - **The blank page's text is also per device.** It is not in the vault, does
   not appear in search, and is not exported. File it to make it real.
 - **"Ask for persistent storage" is a request, not a guarantee.** Some

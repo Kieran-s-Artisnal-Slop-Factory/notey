@@ -1,67 +1,45 @@
 /*
- * notey theme — card-index paper design system. All configurable design
- * tokens live here; uses light-dark() so both themes are defined in one
- * place, and color-scheme on :root makes the browser honor the user
- * preference.
+ * notey theme — a card index rendered in a browser.
  *
- * Two sheets, one filing cabinet:
- *   light — typewriter ink on cream card stock, on an aged-paper desk
- *   dark  — the same desk by lamplight: everything warm and dimmed, never
- *           cold slate
+ * Three independent choices, three attributes on <html>, set before first
+ * paint by the script in Layout.astro:
  *
- * Three inks + one stamp (the token NAMES are useful's — the ported editor
- * components consume them by name — only the values are notey's):
- *   ink    (--text-color)               what the typewriter left behind
- *   pencil (--text-muted-color)         annotations, secondary text
- *   pen    (--color-primary)            fountain-pen blue — links, actions,
- *                                       and every [[wiki link]]
- *   stamp  (--color-stamp)              the archivist's red — THE rule line
- *                                       under a note's header, eyebrows,
- *                                       focus rings. Used sparingly, like a
- *                                       date stamp.
+ *   data-page="light|dark"     the PAPER — the sheet, its ink, its chrome
+ *   data-desk="plain-light|…"  the DESK  — what the sheet lies on
+ *   data-accent="ink|…"        the PEN   — buttons, links, focus
+ *
+ * They are independent on purpose: a dark desk can hold a light page.
+ * Nothing here uses light-dark() any more, because "the page is light" and
+ * "the desk is dark" have to be sayable at the same time.
+ *
+ * The token NAMES are useful's — the ported editor stack reads them by
+ * name — and only the values are notey's.
+ *
+ * Three inks and a stamp:
+ *   ink    (--text-color)        what the typewriter left behind
+ *   pencil (--text-muted-color)  annotations, secondary text
+ *   pen    (--color-primary)     the accent: links, actions, [[wiki links]]
+ *   stamp  (--color-stamp)       the archivist's red — THE rule under a
+ *                                header, eyebrows, focus rings. Sparingly.
+ */
+
+/* ── procedural textures ───────────────────────────────────────────────
+ * No image files: two SVG filters, tiled. `--tex-grain` stretches noise
+ * along one axis, which is what makes wood read as wood; `--tex-pebble`
+ * lights a noise field from one side, which is what makes leather read as
+ * leather. Both are grey and are blended over a colour, so one tile
+ * serves every variant.
  */
 :root {
-  color-scheme: light dark;
+  --tex-grain: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='700' height='700'%3E%3Cfilter id='g'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='0.55 0.008' numOctaves='5' seed='11'/%3E%3CfeColorMatrix type='saturate' values='0'/%3E%3C/filter%3E%3Crect width='700' height='700' filter='url(%23g)' opacity='0.55'/%3E%3C/svg%3E");
+  --tex-knot: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='900' height='900'%3E%3Cfilter id='k'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='0.05 0.003' numOctaves='4' seed='29'/%3E%3CfeColorMatrix type='saturate' values='0'/%3E%3C/filter%3E%3Crect width='900' height='900' filter='url(%23k)' opacity='0.5'/%3E%3C/svg%3E");
+  --tex-pebble: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='260' height='260'%3E%3Cfilter id='l'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='0.09' numOctaves='5' seed='5' result='n'/%3E%3CfeDiffuseLighting in='n' lighting-color='%23ffffff' surfaceScale='3.4' diffuseConstant='1.1'%3E%3CfeDistantLight azimuth='58' elevation='42'/%3E%3C/feDiffuseLighting%3E%3CfeComponentTransfer%3E%3CfeFuncR type='linear' slope='1.6' intercept='-0.3'/%3E%3CfeFuncG type='linear' slope='1.6' intercept='-0.3'/%3E%3CfeFuncB type='linear' slope='1.6' intercept='-0.3'/%3E%3C/feComponentTransfer%3E%3C/filter%3E%3Crect width='260' height='260' filter='url(%23l)'/%3E%3C/svg%3E");
+  --tex-creases: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='800' height='800'%3E%3Cfilter id='c'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='0.011' numOctaves='3' seed='17'/%3E%3CfeColorMatrix type='saturate' values='0'/%3E%3C/filter%3E%3Crect width='800' height='800' filter='url(%23c)' opacity='0.4'/%3E%3C/svg%3E");
 
-  /* Fountain-pen blue — actions and links */
-  --color-primary: light-dark(#28439c, #9db1ee);
-  --color-primary-strong: light-dark(#1b2f70, #c3d0f7);
-  --color-primary-soft: light-dark(#dde3f4, #2c3a66);
-  --color-on-primary: light-dark(#fbf6e7, #1a2547);
+  /* ── scale, shape and voice: the same on every paper ───────────────── */
 
-  /* The stamp accent — the red rule, and nothing casual */
-  --color-stamp: light-dark(#a8352c, #cf7466);
-
-  /* Surfaces — the desk, the page, a card lifted off the page */
-  --bg-color: light-dark(#e7dec6, #23201a);
-  --surface-color: light-dark(#f8f2e0, #2e2a21);
-  --surface-raised-color: light-dark(#fbf6e7, #383325);
-
-  /* Text */
-  --text-color: light-dark(#221e16, #e8e1cd);
-  --text-muted-color: light-dark(#6f654c, #a89c7d);
-
-  /* Lines. --border-color is decorative (card edges, table rules);
-     boundaries that IDENTIFY a control (inputs, search) use
-     --border-strong-color. */
-  --border-color: light-dark(#d9cdab, #4a4433);
-  --border-strong-color: light-dark(#8a7f63, #7d7457);
-
-  /* Ruled-paper guides (the faint blue lines a pad is printed with) and the
-     red rule under a note's header. notey-specific tokens. */
-  --rule-color: var(--color-stamp);
-  --ruled-line-color: light-dark(rgb(40 67 156 / 0.14), rgb(157 177 238 / 0.12));
-
-  /* Feedback. Never the stamp red — feedback must not read as brand. */
-  --color-success: light-dark(#3c6b34, #8fce85);
-  --color-danger: light-dark(#8f2b1f, #e08a77);
-  --color-warning: light-dark(#8a6116, #d9a94e);
-
-  /* Overlay scrim — ink wash, warm, so the desk stays paper. */
-  --scrim-color: light-dark(rgb(34 30 22 / 0.45), rgb(12 10 6 / 0.6));
-
-  /* Typography — a typewriter voice for everything. Courier Prime is
-     vendored (public/fonts); the stack degrades to the system's Couriers. */
+  /* Typography — a typewriter voice. Courier Prime is vendored; the stack
+     degrades to the system's Couriers. */
   --font-body: 'Courier Prime', 'Courier New', ui-monospace, 'Cascadia Code', Consolas, monospace;
   /* The body face IS monospace, so this is an alias rather than a second
      stack — code and readouts ask for "the mono face" by name. */
@@ -73,13 +51,12 @@
   --font-size-2xl: 2rem;
   --line-height: 1.6;
   /* Annotation voice: tiny, uppercase, wide-tracked (apply with .eyebrow) —
-     the "ACC. NO. 0001 · PERMANENT COLLECTION" register. */
+     the "ACC. NO. 0001" register. */
   --font-size-eyebrow: 0.7rem;
   --tracking-label: 0.18em;
   --tracking-wide: 0.08em;
   --tracking-brand: 0.24em;
 
-  /* Spacing */
   --space-1: 0.2rem;
   --space-2: 0.4rem;
   --space-3: 0.6rem;
@@ -87,18 +64,268 @@
   --space-5: 1.2rem;
   --space-6: 2rem;
 
-  /* Shape — index cards have gently rounded corners */
+  /* Index cards have gently rounded corners. */
   --radius-sm: 2px;
   --radius-md: 4px;
   --radius-lg: 6px;
   --radius-full: 999px;
 
-  /* Elevation — a sheet sits just off the desk; dialogs get a real throw */
-  --shadow-1: light-dark(0 1px 3px rgb(34 30 22 / 0.14), 0 1px 3px rgb(0 0 0 / 0.4));
-  --shadow-2: light-dark(0 14px 40px rgb(34 30 22 / 0.3), 0 16px 44px rgb(0 0 0 / 0.55));
-
-  /* Layout */
   --page-max-width: 54rem;
   --navbar-height: 3rem;
   --sidebar-width: 17rem;
+
+  /* The red rule is the stamp, always. */
+  --rule-color: var(--color-stamp);
+
+  /* Derived from the accent and the paper, so one swatch dresses the app.
+     Custom properties resolve where they are USED, so these read the
+     page-scoped values set below. */
+  --color-primary-strong: color-mix(in srgb, var(--color-primary) 76%, var(--text-color));
+  --color-primary-soft: color-mix(in srgb, var(--color-primary) 16%, var(--surface-color));
+  --color-on-primary: var(--accent-on);
+}
+
+/* ── the paper ─────────────────────────────────────────────────────────
+ * Everything the sheet is made of, plus the chrome that must stay legible
+ * against it: the palette, dialogs, inputs. Deliberately NOT the desk.
+ */
+:root[data-page='light'] {
+  color-scheme: light;
+
+  --surface-color: #f8f2e0;
+  --surface-raised-color: #fbf6e7;
+
+  --text-color: #221e16;
+  --text-muted-color: #6f654c;
+
+  --border-color: #d9cdab;
+  --border-strong-color: #8a7f63;
+
+  --color-stamp: #a8352c;
+  --color-primary: var(--accent-base);
+
+  --color-success: #3c6b34;
+  --color-danger: #8f2b1f;
+  --color-warning: #8a6116;
+
+  --ruled-line-color: rgb(40 67 156 / 0.14);
+  --scrim-color: rgb(34 30 22 / 0.45);
+  --shadow-1: 0 1px 3px rgb(34 30 22 / 0.14);
+  --shadow-2: 0 14px 40px rgb(34 30 22 / 0.3);
+}
+
+:root[data-page='dark'] {
+  color-scheme: dark;
+
+  --surface-color: #2e2a21;
+  --surface-raised-color: #383325;
+
+  --text-color: #e8e1cd;
+  --text-muted-color: #a89c7d;
+
+  --border-color: #4a4433;
+  --border-strong-color: #7d7457;
+
+  --color-stamp: #cf7466;
+  /* A pen chosen for paper is too dark for lamplight; lift it toward the
+     ink so every accent stays a link and not a bruise. */
+  --color-primary: color-mix(in srgb, var(--accent-base) 52%, #f0e8d4);
+
+  --color-success: #8fce85;
+  --color-danger: #e08a77;
+  --color-warning: #d9a94e;
+
+  --ruled-line-color: rgb(157 177 238 / 0.12);
+  --scrim-color: rgb(12 10 6 / 0.62);
+  --shadow-1: 0 1px 3px rgb(0 0 0 / 0.4);
+  --shadow-2: 0 16px 44px rgb(0 0 0 / 0.55);
+}
+
+/* ── the pen ───────────────────────────────────────────────────────────
+ * One base colour per swatch and the ink that goes ON it. Everything else
+ * is mixed from the paper, so a swatch works on either.
+ */
+:root[data-accent='ink'] { --accent-base: #28439c; --accent-on: #fbf6e7; }
+:root[data-accent='oxblood'] { --accent-base: #8c2f39; --accent-on: #fdf3ec; }
+:root[data-accent='forest'] { --accent-base: #1f5c3d; --accent-on: #f2f8f2; }
+:root[data-accent='teal'] { --accent-base: #136b73; --accent-on: #eefafa; }
+:root[data-accent='aubergine'] { --accent-base: #5b2a6b; --accent-on: #f9f0fb; }
+:root[data-accent='rust'] { --accent-base: #9c4a16; --accent-on: #fdf1e6; }
+:root[data-accent='slate'] { --accent-base: #42546b; --accent-on: #f2f5f9; }
+:root[data-accent='moss'] { --accent-base: #5d6b21; --accent-on: #f7f9ea; }
+
+/* Nothing chosen yet (a first paint before the script, or a stray root):
+   fall back to paper and ink rather than to nothing at all. */
+:root:not([data-page]) {
+  color-scheme: light;
+  --surface-color: #f8f2e0;
+  --surface-raised-color: #fbf6e7;
+  --text-color: #221e16;
+  --text-muted-color: #6f654c;
+  --border-color: #d9cdab;
+  --border-strong-color: #8a7f63;
+  --color-stamp: #a8352c;
+  --color-primary: #28439c;
+  --color-success: #3c6b34;
+  --color-danger: #8f2b1f;
+  --color-warning: #8a6116;
+  --scrim-color: rgb(34 30 22 / 0.45);
+  --shadow-1: 0 1px 3px rgb(34 30 22 / 0.14);
+  --shadow-2: 0 14px 40px rgb(34 30 22 / 0.3);
+}
+:root:not([data-accent]) { --accent-base: #28439c; --accent-on: #fbf6e7; }
+
+/* ── the desk ──────────────────────────────────────────────────────────
+ * `--bg-color` is the flat colour anything sitting ON the desk can use
+ * when it needs to be certain of a background (the palette does exactly
+ * that). `--desk-layers` is the texture, painted on <body> only.
+ * `--desk-ink` is what stays legible against it — the letterhead and the
+ * book live out there, not on the paper.
+ */
+:root:not([data-desk]),
+:root[data-desk='plain-light'] {
+  --bg-color: #e7dec6;
+  --desk-ink: #4a4231;
+  --desk-ink-muted: #7d7358;
+  --desk-layers: none;
+  --desk-blend: normal;
+  --desk-size: auto;
+}
+
+:root[data-desk='plain-dark'] {
+  --bg-color: #23201a;
+  --desk-ink: #cfc6ae;
+  --desk-ink-muted: #8d846d;
+  --desk-layers: none;
+  --desk-blend: normal;
+  --desk-size: auto;
+}
+
+/* Wood: long grain, a few darker growth lines, and the sheen of a board. */
+:root[data-desk='wood-mahogany'] {
+  --bg-color: #4a2016;
+  --desk-ink: #f0dccb;
+  --desk-ink-muted: #bd9f8c;
+  --desk-layers:
+    var(--tex-grain),
+    var(--tex-knot),
+    repeating-linear-gradient(
+      91deg,
+      rgb(0 0 0 / 0.13) 0 1px,
+      rgb(255 210 180 / 0.035) 1px 3px,
+      transparent 3px 9px,
+      rgb(0 0 0 / 0.13) 9px 10px,
+      transparent 10px 23px
+    ),
+    repeating-linear-gradient(
+      90deg,
+      rgb(0 0 0 / 0.3) 0 2px,
+      transparent 2px 168px
+    ),
+    linear-gradient(97deg, #5d2a1c 0%, #3b170f 34%, #58281a 63%, #34140d 100%);
+  --desk-blend: overlay, soft-light, overlay, overlay, normal;
+  --desk-size: 700px 700px, 900px 900px, auto, auto, auto;
+}
+
+:root[data-desk='wood-oak'] {
+  --bg-color: #9a6b38;
+  --desk-ink: #2a1a0c;
+  --desk-ink-muted: #56381c;
+  --desk-layers:
+    var(--tex-grain),
+    var(--tex-knot),
+    repeating-linear-gradient(
+      91deg,
+      rgb(78 46 16 / 0.16) 0 1px,
+      rgb(255 236 200 / 0.06) 1px 3px,
+      transparent 3px 9px,
+      rgb(78 46 16 / 0.16) 9px 10px,
+      transparent 10px 23px
+    ),
+    repeating-linear-gradient(
+      90deg,
+      rgb(64 38 12 / 0.32) 0 2px,
+      transparent 2px 168px
+    ),
+    linear-gradient(94deg, #b07f47 0%, #8d6031 40%, #a97742 68%, #82562b 100%);
+  --desk-blend: overlay, soft-light, overlay, overlay, normal;
+  --desk-size: 700px 700px, 900px 900px, auto, auto, auto;
+}
+
+:root[data-desk='wood-birch'] {
+  --bg-color: #d8c39a;
+  --desk-ink: #3b2f1a;
+  --desk-ink-muted: #6d5c3c;
+  --desk-layers:
+    var(--tex-grain),
+    var(--tex-knot),
+    repeating-linear-gradient(
+      91deg,
+      rgb(120 92 52 / 0.1) 0 1px,
+      rgb(255 252 240 / 0.09) 1px 3px,
+      transparent 3px 9px,
+      rgb(120 92 52 / 0.1) 9px 10px,
+      transparent 10px 23px
+    ),
+    repeating-linear-gradient(
+      90deg,
+      rgb(120 92 52 / 0.2) 0 2px,
+      transparent 2px 168px
+    ),
+    linear-gradient(93deg, #e6d3ac 0%, #cfb890 38%, #e2cfa6 66%, #c6ae86 100%);
+  --desk-blend: soft-light, soft-light, overlay, overlay, normal;
+  --desk-size: 700px 700px, 900px 900px, auto, auto, auto;
+}
+
+/* Leather: a lit pebble grain, broad creasing, and a worn-in vignette. */
+:root[data-desk='leather-black'] {
+  --bg-color: #211d1b;
+  --desk-ink: #d9d0c4;
+  --desk-ink-muted: #8f867b;
+  --desk-layers:
+    var(--tex-pebble),
+    var(--tex-creases),
+    radial-gradient(120% 90% at 50% 0%, rgb(255 255 255 / 0.06), transparent 70%),
+    linear-gradient(160deg, #2b2624 0%, #1b1817 60%, #241f1d 100%);
+  --desk-blend: overlay, soft-light, normal, normal;
+  --desk-size: 260px 260px, 800px 800px, auto, auto;
+}
+
+:root[data-desk='leather-rich'] {
+  --bg-color: #3d2317;
+  --desk-ink: #f0dfd0;
+  --desk-ink-muted: #b79c88;
+  --desk-layers:
+    var(--tex-pebble),
+    var(--tex-creases),
+    radial-gradient(120% 90% at 50% 0%, rgb(255 236 210 / 0.09), transparent 70%),
+    linear-gradient(160deg, #4b2c1d 0%, #331d13 58%, #422619 100%);
+  --desk-blend: overlay, soft-light, normal, normal;
+  --desk-size: 260px 260px, 800px 800px, auto, auto;
+}
+
+:root[data-desk='leather-tan'] {
+  --bg-color: #8a5a33;
+  --desk-ink: #2a1a0e;
+  --desk-ink-muted: #5a3a20;
+  --desk-layers:
+    var(--tex-pebble),
+    var(--tex-creases),
+    radial-gradient(120% 90% at 50% 0%, rgb(255 240 215 / 0.12), transparent 70%),
+    linear-gradient(160deg, #9d6a3d 0%, #7d5029 58%, #8f5f36 100%);
+  --desk-blend: overlay, soft-light, normal, normal;
+  --desk-size: 260px 260px, 800px 800px, auto, auto;
+}
+
+:root[data-desk='leather-cream'] {
+  --bg-color: #c9a678;
+  --desk-ink: #382613;
+  --desk-ink-muted: #6b5232;
+  --desk-layers:
+    var(--tex-pebble),
+    var(--tex-creases),
+    radial-gradient(120% 90% at 50% 0%, rgb(255 250 235 / 0.14), transparent 70%),
+    linear-gradient(160deg, #d7b587 0%, #bf9a6c 58%, #cdaa7c 100%);
+  --desk-blend: soft-light, soft-light, normal, normal;
+  --desk-size: 260px 260px, 800px 800px, auto, auto;
 }

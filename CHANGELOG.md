@@ -7,11 +7,21 @@
   Each note is a Markdown file with YAML frontmatter shown above the red rule
   (title on the left, frontmatter on the right), filed into notebooks
   (folders) or left in the Pile.
-* **Everything runs through Ctrl+K.** There is no sidebar and no toolbar: the
-  command palette creates notes and notebooks, browses the notebooks, the
-  Pile and a note's links, exports, prints and deletes. Browsing views stay
-  open while you look around; only landing on a page closes it. The one piece
-  of chrome is a closed book in the corner that opens the same palette.
+* **Choose the paper, the desk and the pen separately.** The page can be
+  light while the desk is dark. Desks come as Plain, Wood (mahogany, oak,
+  birch) or Leather (black, rich brown, tan, cream), and the textures are
+  generated in CSS from SVG turbulence rather than shipped as images — no
+  downloads, any size, and the command palette keeps a solid background so
+  it stays legible over all of them. Eight accent colours dress the buttons,
+  links and focus rings.
+* **Everything runs through Ctrl+K**, settings included — they are a view
+  inside the palette rather than a page you navigate away to.
+  There is no sidebar and no toolbar: the palette creates notes and
+  notebooks, browses the notebooks, the Pile and a note's links, exports,
+  prints and deletes, with commands and notes under their own headings.
+  Browsing views stay open while you look around; only landing on a page
+  closes it. The one piece of chrome is a closed book in the corner that
+  opens the same palette.
 * The full **useful notebook editor**, ported: WYSIWYG / Source / Preview
   faces over one markdown string, `[[wiki links]]` with backlinks and rename
   aliases, footnotes (Alt+0, dialog, gutter markers), mermaid diagrams with a
@@ -56,6 +66,18 @@ Found while building 0.1.0. The first three are in code ported from
 * **A link to a note that did not exist yet created it as "Untitled"** when
   followed from the palette's Links view, leaving the link that made it still
   dangling. It now takes the link's own name.
+* **A long note spilled off the bottom of the page onto the desk.** The sheet
+  was given its 8 x 11 shape with `aspect-ratio`, which fixes the height, so
+  the writing overflowed instead of growing it. It is a minimum now.
+* **Typos were saved, and remembered.** The title is a filename, so writing
+  it on every keystroke renamed the file that often — and every intermediate
+  spelling became an alias the note answered to forever. The title now
+  commits when you leave the field or press Enter (Escape puts the saved one
+  back), and the typing debounce elsewhere went from 400 ms to 1.5 s.
+* **Naming a brand-new note left it answering to "Untitled".** A note that
+  has never been given a name is being named for the first time, not
+  renamed, so no alias is kept — otherwise every note started life with
+  `Untitled` in its alias list and cluttered every link lookup.
 
 ## Other
 

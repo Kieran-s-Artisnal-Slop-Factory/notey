@@ -60,7 +60,7 @@ keystroke
   → Milkdown coalesces ~200 ms
   → emit() debounces `debounce` ms (the app passes 150)
   → onChange(md)
-  → NoteyApp.onBodyChange → body = md, scheduleSave() 400 ms
+  → NoteyApp.onBodyChange → body = md, scheduleSave() 1.5 s
   → doSave() writes the file
 ```
 

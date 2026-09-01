@@ -1,14 +1,13 @@
 ---
 import '../styles/theme.css';
 import '../styles/global.css';
-import { href, isPath } from '../lib/paths';
+import { href } from '../lib/paths';
 
 interface Props {
   title: string;
 }
 
 const { title } = Astro.props;
-const currentPath = Astro.url.pathname;
 // Base-aware paths for the inline scripts / static links below (works whether
 // the app is served at the root or under a sub-path like GitHub Pages).
 const swPath = href('/sw.js');
@@ -26,14 +25,32 @@ const swPath = href('/sw.js');
     <link rel="stylesheet" href={href('/fonts/fonts.css')} />
     <title>{title} · notey</title>
     <script is:inline>
-      // Apply the manual theme override before first paint to avoid a flash.
-      // 'light'/'dark' pin the scheme; anything else follows the OS setting.
+      // The look, applied before first paint so there is no flash of the
+      // wrong paper. Three plain strings rather than the preferences blob,
+      // so this cannot throw on a half-written value; src/lib/prefs.ts
+      // mirrors them on every save and applies the same three attributes
+      // when a choice changes mid-session.
       (() => {
+        const root = document.documentElement;
+        let page = null;
+        let desk = null;
+        let accent = null;
         try {
-          const theme = localStorage.getItem('notey-theme');
-          document.documentElement.style.colorScheme =
-            theme === 'light' || theme === 'dark' ? theme : '';
+          page = localStorage.getItem('notey-page');
+          desk = localStorage.getItem('notey-desk');
+          accent = localStorage.getItem('notey-accent');
         } catch {}
+        const resolved =
+          page === 'light' || page === 'dark'
+            ? page
+            : matchMedia('(prefers-color-scheme: dark)').matches
+              ? 'dark'
+              : 'light';
+        root.dataset.page = resolved;
+        root.dataset.desk =
+          desk && desk !== 'system' ? desk : resolved === 'dark' ? 'plain-dark' : 'plain-light';
+        root.dataset.accent = accent || 'ink';
+        root.style.colorScheme = resolved;
       })();
     </script>
   </head>
@@ -45,14 +62,6 @@ const swPath = href('/sw.js');
       import { installTestHookIfEnabled } from '../lib/testMode';
       installTestHookIfEnabled();
     </script>
-    <!-- The only chrome above the page: a letterhead that is also the way
-         home. Everything else lives behind Ctrl+K. -->
-    <!-- <header class="topbar" data-print="hide">
-      <a class="brand" href={href('/')}>
-        <span class="brand-name">NOTEY</span>
-        <span class="brand-sub">{isPath(currentPath, '/settings/') ? 'settings' : 'notes on paper'}</span>
-      </a>
-    </header> -->
     <main class="page">
       <slot />
     </main>
@@ -92,37 +101,9 @@ const swPath = href('/sw.js');
 </html>
 
 <style>
-  .topbar {
-    height: var(--navbar-height);
-    display: flex;
-    align-items: center;
-    justify-content: space-between;
-    padding: 0 var(--space-5);
-    border-bottom: 1px solid var(--border-strong-color);
-    background: var(--bg-color);
-  }
-
-  .brand {
-    display: flex;
-    align-items: baseline;
-    gap: var(--space-3);
-    text-decoration: none;
-    color: var(--text-color);
-  }
-
-  .brand-name {
-    font-weight: 700;
-    letter-spacing: var(--tracking-brand);
-    font-size: var(--font-size-base);
-  }
-
-  .brand-sub {
-    font-size: var(--font-size-eyebrow);
-    letter-spacing: var(--tracking-wide);
-    color: var(--text-muted-color);
-  }
-
+  /* There is no chrome above the page any more; `main` simply fills the
+     desk. The navbar token stays because ported components read it. */
   .page {
-    min-height: calc(100dvh - var(--navbar-height));
+    min-height: 100dvh;
   }
 </style>

@@ -14,10 +14,10 @@ _Describes the code as of v0.1.0 (unreleased; schema v1) — verify against sour
 | Path | Role |
 | --- | --- |
 | [src/pages/index.astro](../../src/pages/index.astro) | Mounts `NoteyApp` with `client:only="svelte"` |
-| [src/pages/settings.astro](../../src/pages/settings.astro) | Mounts `SettingsApp` |
 | [src/layouts/Layout.astro](../../src/layouts/Layout.astro) | Letterhead, theme pin, manifest, service-worker registration, test hook |
 | [src/components/NoteyApp.svelte](../../src/components/NoteyApp.svelte) | The app: vault, the page, autosave, exports, bulk actions |
 | [src/components/CommandPalette.svelte](../../src/components/CommandPalette.svelte) | Ctrl+K — every command and every navigation |
+| [src/components/SettingsPanel.svelte](../../src/components/SettingsPanel.svelte) | Settings, as a view inside that palette |
 | [src/components/notebook/](../../src/components/notebook/) | The ported editor: `MarkdownEditor`, `MarkdownPreview`, three dialogs |
 | [src/lib/vault/](../../src/lib/vault/) | The storage seam and its three backends |
 | [src/lib/notebook/](../../src/lib/notebook/) | Pure note logic ported from useful: wiki links, footnotes, mermaid, export, bulk |
@@ -63,7 +63,7 @@ src/
   components/
     NoteyApp.svelte          the app shell: the page and everything it owns
     CommandPalette.svelte    Ctrl+K: commands, library views, bulk actions
-    SettingsApp.svelte       the settings page
+    SettingsPanel.svelte     settings, as a palette view
     Icon.svelte              inline Lucide glyphs
     notebook/                ported editor + dialogs
   layouts/Layout.astro
@@ -71,7 +71,7 @@ src/
     vault/                   types, model (paths), frontmatter, stores, search
     notebook/                pure note logic (wiki, footnotes, mermaid, export…)
     markdown.ts prefs.ts paths.ts zip.ts fuzzy.ts exportFile.ts icons.ts
-  pages/                     index.astro, settings.astro
+  pages/                     index.astro (the only route)
   styles/                    theme.css (tokens), global.css (base + utilities)
 ```
 
@@ -81,13 +81,16 @@ Each of these is load-bearing; the Playwright spec named in
 [testing.md](testing.md) checks most of them.
 
 - **The markdown string is the single source of truth.** The editor is a view
-  over it. Autosave writes 400 ms after the last change and is flushed on
+  over it. Autosave writes 1.5 s after the last change and is flushed on
   pagehide, visibility-hidden, note switch, unmount, and before every export
-  or bulk action.
+  or bulk action. The **title** is not on that clock: it is a filename, so
+  it commits when you leave the field or press Enter.
 - **Page load writes nothing.** The app opens on the unfiled page; an
   unresolved `?note=` deep link offers a Create button rather than creating.
 - **A note's title is its filename.** Renaming moves the file; the old title
-  is pushed into frontmatter `aliases`, so `[[Old title]]` keeps resolving.
+  is pushed into frontmatter `aliases`, so `[[Old title]]` keeps resolving —
+  unless the old name was never a name (a still-`Untitled` note is being
+  named for the first time, not renamed).
 - **Backlinks are computed, never stored.** They cannot go stale.
 - **Deleting a notebook never deletes notes.** Its notes and subfolders move
   up one level, assets included.

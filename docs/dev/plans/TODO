@@ -39,6 +39,12 @@ Additional things to keep in mind:
 - [x] UI rework (asked for mid-build): no sidebar, the book, the 8x11 page,
       blank-first, everything through Ctrl+K — decision 10 in the phased plan
 - [x] 288 unit tests + 28 Playwright cases green against the production build
+- [x] Second UI round: separate paper/desk/pen settings with procedural wood
+      and leather desks, palette section headings, settings moved into the
+      palette (the /settings/ route is gone), the sheet no longer spilling
+      long notes onto the desk, titles committing on blur instead of per
+      keystroke, and no alias kept when a new note is named for the first
+      time. 33 Playwright cases.
 
 ## For human
 

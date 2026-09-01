@@ -16,11 +16,11 @@ picture, the directory map, and the invariants everything else assumes.
 | --- | --- |
 | [architecture.md](dev/architecture.md) | The mental model: stack, runtime flow, directory map, non-negotiable invariants |
 | [data-layer.md](dev/data-layer.md) | The vault — the `VaultStore` seam, the three backends, schema v1, frontmatter round-trips, what writes and when |
-| [ui.md](dev/ui.md) | The page and the command palette: no sidebar, the book, the palette's view stack |
+| [ui.md](dev/ui.md) | The page and the command palette: no sidebar, the book, the view stack, settings-in-palette |
 | [editor.md](dev/editor.md) | The three faces, footnotes, diagrams, drawings, images, maths, and the change plumbing |
 | [search-and-links.md](dev/search-and-links.md) | Wiki links, aliases, backlinks, the rename offer, search grammar and scoring |
 | [export.md](dev/export.md) | Markdown, the self-contained HTML file, print, and the bulk zip |
-| [design-system.md](dev/design-system.md) | The paper tokens, light/lamplight mechanics, utility classes, the red rule |
+| [design-system.md](dev/design-system.md) | Paper, desk and pen as three independent choices; the procedural textures; the red rule |
 | [service-worker-and-offline.md](dev/service-worker-and-offline.md) | Precache vs runtime cache vs the background crawl, cache versioning |
 | [tauri.md](dev/tauri.md) | The desktop build: real `.md` files, the fs capability, what differs |
 | [testing.md](dev/testing.md) | The two suites, the test hook, per-spec coverage |
@@ -41,7 +41,7 @@ opened the app.
 | [exporting.md](user/exporting.md) | Markdown, one-file HTML, print to PDF, bulk zip |
 | [install-and-offline.md](user/install-and-offline.md) | Installing it, what works offline, the one-time downloads |
 | [desktop-app.md](user/desktop-app.md) | The Tauri build: your notes as real files on disk |
-| [settings.md](user/settings.md) | Startup, theme, and what the storage card is telling you |
+| [settings.md](user/settings.md) | Startup, paper, desk, pen, and what the storage card is telling you |
 
 ## Plans
 

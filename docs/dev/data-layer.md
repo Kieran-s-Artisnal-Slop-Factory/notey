@@ -127,7 +127,7 @@ sequenceDiagram
   participant P as The page
   participant S as VaultStore
   U->>P: type a title, body, tags or frontmatter
-  P->>P: scheduleSave, 400 ms debounce
+  P->>P: scheduleSave, 1.5 s debounce (the title commits on blur instead)
   P->>P: rename? title differs from the filename stem
   alt renamed or moved
     P->>S: moveNoteAssets when the folder changed
@@ -145,8 +145,9 @@ sequenceDiagram
 | --- | --- |
 | Opening the app | nothing |
 | Typing on the unfiled page | `localStorage` only (`notey-scratch`) |
-| Typing in a note | that note's file, 400 ms after you stop |
-| Editing the title | renames the file; pushes the old title into `aliases` |
+| Typing in a note | that note's file, 1.5 s after you stop |
+| Editing the title | nothing until you leave the field or press Enter |
+| Committing a title | renames the file; pushes the old title into `aliases`, unless the note had never been named |
 | Changing "inside" | renames the file into the new folder; moves its assets |
 | Editing tags or a frontmatter field | that note's file |
 | Pasting an image | one file in `<folder>/.assets/`, then the note |

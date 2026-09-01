@@ -58,6 +58,17 @@ async function newNote(page: Page): Promise<void> {
   await expect(page.getByTestId('notebook-title')).toHaveValue('Untitled', { timeout: 30_000 });
 }
 
+/**
+ * Name the open note. The title commits on blur or Enter — not on every
+ * keystroke — so a test that wants it saved has to leave the field, the
+ * same as a person does.
+ */
+async function setTitle(page: Page, text: string): Promise<void> {
+  const field = page.getByTestId('notebook-title');
+  await field.fill(text);
+  await field.blur();
+}
+
 /** Type into the Crepe canvas and let the debounce chain settle. */
 async function typeInCanvas(page: Page, text: string): Promise<void> {
   const canvas = page.locator('[data-testid="notebook-canvas"] [contenteditable="true"]');
@@ -96,6 +107,22 @@ test.describe('the page', () => {
     expect(box!.height / box!.width).toBeCloseTo(11 / 8, 1);
   });
 
+  test('a long note grows the sheet instead of spilling onto the desk', async ({ app }) => {
+    await app.page.setViewportSize({ width: 1280, height: 900 });
+    await openApp(app);
+    await typeInCanvas(app.page, 'line one');
+    for (let i = 0; i < 40; i++) await app.page.keyboard.press('Enter');
+    await app.page.keyboard.type('the last line');
+    await app.page.waitForTimeout(900);
+    const { sheetBottom, editorBottom } = await app.page.evaluate(() => ({
+      sheetBottom: document.querySelector('[data-testid="notey-sheet"]')!.getBoundingClientRect()
+        .bottom,
+      editorBottom: document.querySelector('[data-testid="notebook-editor"]')!.getBoundingClientRect()
+        .bottom,
+    }));
+    expect(editorBottom).toBeLessThanOrEqual(sheetBottom);
+  });
+
   test('backend is real sqlite over OPFS in the browser build', async ({ app }) => {
     await openApp(app);
     expect(await app.backend()).toContain('OPFS');
@@ -109,6 +136,17 @@ test.describe('the palette', () => {
     await expect(app.page.getByTestId('notey-palette')).toBeVisible();
     await app.page.getByTestId('notey-book').click();
     await expect(app.page.getByTestId('notey-palette')).toHaveCount(0);
+  });
+
+  test('commands and notes are listed under their own headings', async ({ app }) => {
+    await openApp(app);
+    await app.write({ path: 'Findable.md', kind: 'note', content: 'body' });
+    await openApp(app);
+    await openPalette(app.page);
+    const sections = app.page.locator('[data-testid="notey-palette"] .section');
+    await expect(sections).toHaveText(['Commands', 'Recent notes']);
+    await app.page.getByTestId('notey-palette-input').fill('findable');
+    await expect(sections.last()).toHaveText('Notes');
   });
 
   test('viewing notebooks stays in the palette; opening a note leaves it', async ({ app }) => {
@@ -168,11 +206,50 @@ test.describe('the palette', () => {
   });
 });
 
+test.describe('naming', () => {
+  test('the title commits on blur, not on every keystroke', async ({ app }) => {
+    await openApp(app);
+    await newNote(app.page);
+    const titleField = app.page.getByTestId('notebook-title');
+    await titleField.fill('Draftt');
+    await app.page.waitForTimeout(2000);
+    // Nothing is written while the caret is still in the field, so a typo
+    // on the way to the real name never reaches the disk.
+    expect(await app.read('Draftt.md')).toBeNull();
+    await titleField.fill('Draft');
+    await titleField.blur();
+    await expect
+      .poll(async () => (await app.read('Draft.md'))?.kind ?? null, { timeout: 10_000 })
+      .toBe('note');
+    expect(await app.read('Draftt.md')).toBeNull();
+  });
+
+  test('naming a new note for the first time leaves no alias behind', async ({ app }) => {
+    await openApp(app);
+    await newNote(app.page);
+    const titleField = app.page.getByTestId('notebook-title');
+    await titleField.fill('Real name');
+    await titleField.blur();
+    await expect
+      .poll(async () => (await app.read('Real name.md'))?.content ?? null, { timeout: 10_000 })
+      .toContain('created:');
+    // It was never called anything anyone could have linked to.
+    expect((await app.read('Real name.md'))?.content).not.toContain('aliases');
+    await expect(app.page.getByTestId('notebook-aliases')).toHaveCount(0);
+    // A SECOND rename is a real one, and does leave an alias.
+    await titleField.fill('Better name');
+    await titleField.blur();
+    await expect(app.page.getByTestId('notebook-aliases')).toContainText('Real name', {
+      timeout: 10_000,
+    });
+  });
+});
+
 test.describe('vault', () => {
   test('a note survives a full reload', async ({ app }) => {
     await openApp(app);
     await newNote(app.page);
-    await app.page.getByTestId('notebook-title').fill('First note');
+    await setTitle(app.page, 'First note');
     await typeInCanvas(app.page, 'The body of the first note.');
     await expect(app.page.getByTestId('notebook-save-state')).toContainText('Saved', {
       timeout: 10_000,
@@ -188,7 +265,7 @@ test.describe('vault', () => {
   test('the vault is plain markdown with frontmatter', async ({ app }) => {
     await openApp(app);
     await newNote(app.page);
-    await app.page.getByTestId('notebook-title').fill('Tagged');
+    await setTitle(app.page, 'Tagged');
     await app.page.getByTestId('notebook-tags').fill('alpha, beta');
     await typeInCanvas(app.page, 'Body text.');
     await expect(app.page.getByTestId('notebook-save-state')).toContainText('Saved', {
@@ -206,7 +283,7 @@ test.describe('linking', () => {
   test('a wiki link is listed, resolves after creation, and backlinks', async ({ app }) => {
     await openApp(app);
     await newNote(app.page);
-    await app.page.getByTestId('notebook-title').fill('Alpha');
+    await setTitle(app.page, 'Alpha');
     await typeInCanvas(app.page, 'See [[Beta]] for more.');
     await expect(app.page.getByTestId('notebook-save-state')).toContainText('Saved', {
       timeout: 10_000,
@@ -225,10 +302,10 @@ test.describe('linking', () => {
   test('rename keeps old links working via aliases and offers a rewrite', async ({ app }) => {
     await openApp(app);
     await newNote(app.page);
-    await app.page.getByTestId('notebook-title').fill('Target');
+    await setTitle(app.page, 'Target');
     await typeInCanvas(app.page, 'I am the target.');
     await newNote(app.page);
-    await app.page.getByTestId('notebook-title').fill('Linker');
+    await setTitle(app.page, 'Linker');
     await typeInCanvas(app.page, 'Points at [[Target]].');
     await expect(app.page.getByTestId('notebook-save-state')).toContainText('Saved', {
       timeout: 10_000,
@@ -236,7 +313,7 @@ test.describe('linking', () => {
     await runCommand(app.page, 'View the Pile');
     await item(app.page, 'Target').click();
     await expect(app.page.getByTestId('notebook-title')).toHaveValue('Target');
-    await app.page.getByTestId('notebook-title').fill('Renamed target');
+    await setTitle(app.page, 'Renamed target');
     await expect(app.page.getByTestId('notebook-save-state')).toContainText('Saved', {
       timeout: 10_000,
     });
@@ -275,7 +352,7 @@ test.describe('organizing', () => {
     await app.write({ path: 'Work', kind: 'dir', content: null });
     await openApp(app);
     await newNote(app.page);
-    await app.page.getByTestId('notebook-title').fill('Plan');
+    await setTitle(app.page, 'Plan');
     await expect(app.page.getByTestId('notebook-save-state')).toContainText('Saved', {
       timeout: 10_000,
     });
@@ -344,7 +421,7 @@ test.describe('editor', () => {
     test.slow();
     await openApp(app);
     await newNote(app.page);
-    await app.page.getByTestId('notebook-title').fill('Cited');
+    await setTitle(app.page, 'Cited');
     await typeInCanvas(app.page, 'A claim worth citing.');
     await app.page.keyboard.press('Alt+Digit0');
     const dialogText = app.page.locator('.backdrop textarea');
@@ -469,7 +546,7 @@ test.describe('preferences', () => {
       timeout: 30_000,
     });
 
-    await app.page.getByTestId('notebook-title').fill('Filed thought');
+    await setTitle(app.page, 'Filed thought');
     await runCommand(app.page, 'File this note in the Pile');
     await expect
       .poll(async () => (await app.loadAll()).map((r) => r.path), { timeout: 10_000 })
@@ -480,19 +557,47 @@ test.describe('preferences', () => {
     await openApp(app);
     await app.write({ path: 'Sticky.md', kind: 'note', content: 'stays open' });
     await openNoteByLink(app, 'Sticky');
-    await app.goto('/settings/');
-    await app.ready();
-    await app.page.getByTestId('notey-startup-last').check();
+    await runCommand(app.page, 'Settings');
+    await app.page.getByTestId('notey-startup-last').click();
     await app.goto('/');
     await app.ready();
     await expect(app.page.getByTestId('notebook-title')).toHaveValue('Sticky', { timeout: 30_000 });
   });
 
-  test('settings shows the storage backend', async ({ app }) => {
-    await app.goto('/settings/');
-    await app.ready();
+  test('settings live in the palette and name the storage backend', async ({ app }) => {
+    await openApp(app);
+    await runCommand(app.page, 'Settings');
+    // Still in the palette — settings are a view, not a page.
+    await expect(app.page.getByTestId('notey-palette')).toBeVisible();
+    await expect(app.page.getByTestId('notey-settings')).toBeVisible();
     await expect(app.page.getByTestId('notey-backend')).toContainText('sqlite', {
       timeout: 30_000,
     });
+    // Escape goes back to the commands, not out of the app.
+    await app.page.keyboard.press('Escape');
+    await expect(item(app.page, 'View the Pile')).toBeVisible();
+  });
+
+  test('the paper, the desk and the pen are chosen separately', async ({ app }) => {
+    await openApp(app);
+    await runCommand(app.page, 'Settings');
+    await app.page.getByTestId('notey-page-light').click();
+    await app.page.getByTestId('notey-desk-wood-mahogany').click();
+    await app.page.getByTestId('notey-accent-oxblood').click();
+    const look = () =>
+      app.page.evaluate(() => {
+        const r = document.documentElement;
+        return { page: r.dataset['page'], desk: r.dataset['desk'], accent: r.dataset['accent'] };
+      });
+    // A dark desk under a light page is the point of splitting them.
+    expect(await look()).toEqual({ page: 'light', desk: 'wood-mahogany', accent: 'oxblood' });
+    const textured = await app.page.evaluate(
+      () => getComputedStyle(document.body).backgroundImage
+    );
+    expect(textured).toContain('data:image/svg+xml');
+    // And it survives a reload, applied before the first paint.
+    await app.goto('/');
+    await app.ready();
+    expect(await look()).toEqual({ page: 'light', desk: 'wood-mahogany', accent: 'oxblood' });
   });
 });

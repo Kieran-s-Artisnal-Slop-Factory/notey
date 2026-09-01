@@ -17,7 +17,7 @@
 
 // Bump this on any meaningful change to this file: `activate` only purges
 // caches whose name differs.
-const CACHE_NAME = 'notey-cache-v1';
+const CACHE_NAME = 'notey-cache-v2';
 
 // Everything under this prefix belongs to this app. Cache Storage is keyed
 // by ORIGIN, not by service-worker scope; scoping deletion to the prefix
@@ -33,7 +33,8 @@ const ASSET_PREFIX = BASE + '_astro/';
 // build (Excalidraw alone contributes hundreds); anything with a slash
 // after the prefix, or no extension, is not ours.
 const ASSET_FILE = /^[^/]+\.[A-Za-z0-9]+$/;
-const SHELL = ['', 'settings/', 'favicon.svg', 'favicon-maskable.svg', 'manifest.webmanifest'].map(
+// One page: settings live inside the command palette, not on a route.
+const SHELL = ['', 'favicon.svg', 'favicon-maskable.svg', 'manifest.webmanifest'].map(
   (p) => BASE + p
 );
 
