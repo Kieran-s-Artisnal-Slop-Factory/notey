@@ -161,6 +161,13 @@
   let selfMutating = false;
   /** The open note was deleted in another tab; the next save files it again. */
   let detached = $state(false);
+  /**
+   * The whole vault was replaced from a database file (in this tab or
+   * another). Everything on screen belongs to a vault that is gone, so the
+   * page starts again — and must NOT write first: this page's note would
+   * land in someone else's vault.
+   */
+  let vaultReplaced = $state(false);
   /** Saves run one after another, never overlapping. */
   let saveChain: Promise<void> = Promise.resolve();
   /** Writes still landing for a page whose lock is about to be let go. */
@@ -526,6 +533,18 @@
    * this tab's own changes arrive too, while `selfMutating` is set.
    */
   function onChanges(changes: Change[]): void {
+    // A replaced vault is not a change to react to; it is a different
+    // vault. Every tab starts again, whichever one did it — including the
+    // tab that asked, once it has shown what happened.
+    if (changes.some((change) => change.op === 'reload')) {
+      vaultReplaced = true;
+      clearTimeout(saveTimer);
+      saveTimer = undefined;
+      clearTimeout(refreshTimer);
+      flash('The vault was replaced from a database file. Starting again…');
+      setTimeout(() => location.reload(), 1500);
+      return;
+    }
     scheduleRefresh();
     if (selfMutating || !currentPath || scratchOpen) return;
     const open = currentPath;
@@ -923,6 +942,8 @@
    * travelling, and a tab promoted on it would read the row from before.
    */
   async function flushSave(): Promise<void> {
+    // The vault these words belong to is gone (see `vaultReplaced`).
+    if (vaultReplaced) return;
     editor?.flush();
     if (scratchOpen) {
       titleDirty = false;

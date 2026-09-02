@@ -26,7 +26,13 @@
   } from '../lib/prefs';
   import { requestPersistentStorage, storageEstimate, type PersistState } from '../lib/persistence';
   import { openVaultStore } from '../lib/vault/store';
-  import { describeImport, exportFileName, exportVault, importVault } from '../lib/vault/transfer';
+  import {
+    dbFileName,
+    describeImport,
+    exportFileName,
+    exportVault,
+    importVault,
+  } from '../lib/vault/transfer';
   import { notesHeldElsewhere, platformLocks, VAULT_MUTATE_LOCK } from '../lib/vault/noteLocks';
   import { downloadBlob } from '../lib/exportFile';
 
@@ -39,6 +45,9 @@
   let transferNote = $state<string | null>(null);
   let transferring = $state(false);
   let fileField = $state<HTMLInputElement | undefined>();
+  let dbField = $state<HTMLInputElement | undefined>();
+  /** Whether this backend is one database file (the browser's; not the desktop's). */
+  let hasDbFile = $state(false);
 
   const deskGroups = ['Plain', 'Wood', 'Leather'] as const;
   const desksIn = (group: (typeof deskGroups)[number]) => DESKS.filter((d) => d.group === group);
@@ -48,6 +57,7 @@
       try {
         const store = await openVaultStore();
         backend = store.backend;
+        hasDbFile = typeof store.exportDb === 'function';
         vaultBytes = (await store.usage?.())?.bytes ?? null;
       } catch (err) {
         backend = 'failed to open: ' + String(err);
@@ -106,6 +116,67 @@
     }
   }
 
+  /**
+   * The database file itself. Not a backup — the zip above is that — but
+   * the thing you open in a SQLite browser when someone's notes are behaving
+   * oddly and you want to see the rows they actually have.
+   */
+  async function exportDatabase(): Promise<void> {
+    transferring = true;
+    transferNote = null;
+    try {
+      const store = await openVaultStore();
+      if (!store.exportDb) throw new Error('this vault is not one database file');
+      const bytes = await store.exportDb();
+      downloadBlob(
+        new Blob([bytes as BlobPart], { type: 'application/vnd.sqlite3' }),
+        dbFileName()
+      );
+      transferNote = `Exported the database — ${mb(bytes.byteLength)}.`;
+    } catch (err) {
+      transferNote = 'Export failed: ' + String(err);
+    } finally {
+      transferring = false;
+    }
+  }
+
+  /**
+   * Take someone else's database and become it. Destructive on purpose:
+   * the point is to see exactly what they see, so a merge would be the
+   * wrong answer. Every tab reloads afterwards (the vault they were
+   * showing no longer exists).
+   */
+  async function replaceFromDatabase(file: File): Promise<void> {
+    const sure = confirm(
+      `Replace this vault with “${file.name}”?\n\n` +
+        'Every note here is deleted and the ones in that file take their ' +
+        'place. Export first if you want yours back.'
+    );
+    if (!sure) return;
+    transferring = true;
+    transferNote = null;
+    try {
+      const store = await openVaultStore();
+      if (!store.importDb) throw new Error('this vault is not one database file');
+      const bytes = new Uint8Array(await file.arrayBuffer());
+      const out = await store.importDb(bytes);
+      transferNote =
+        `Replaced the vault: ${out.notes} note${out.notes === 1 ? '' : 's'} ` +
+        `in ${out.files} row${out.files === 1 ? '' : 's'}. Reloading…`;
+    } catch (err) {
+      transferNote = 'Import failed: ' + String(err);
+    } finally {
+      transferring = false;
+    }
+  }
+
+  function onDbPicked(event: Event): void {
+    const input = event.currentTarget as HTMLInputElement;
+    const file = input.files?.[0];
+    input.value = '';
+    if (file) void replaceFromDatabase(file);
+  }
+
   function onFilePicked(event: Event): void {
     const input = event.currentTarget as HTMLInputElement;
     const file = input.files?.[0];
@@ -119,7 +190,17 @@
     applyLook(prefs);
   }
 
-  const mb = (bytes: number): string => (bytes / (1024 * 1024)).toFixed(1) + ' MB';
+  /**
+   * A size a person can read. A fresh vault is tens of kilobytes, so
+   * rounding everything to MB reports "0.0 MB" for a database that is
+   * plainly not empty.
+   */
+  const mb = (bytes: number): string =>
+    bytes < 1024
+      ? `${bytes} bytes`
+      : bytes < 1024 * 1024
+        ? `${(bytes / 1024).toFixed(0)} KB`
+        : `${(bytes / (1024 * 1024)).toFixed(1)} MB`;
 </script>
 
 <div class="settings" data-testid="notey-settings">
@@ -280,6 +361,38 @@
       Importing adds to what is here and overwrites nothing — a note that
       clashes is filed alongside.
     </p>
+    {#if hasDbFile}
+      <div class="row">
+        <button
+          class="btn btn-sm"
+          data-testid="notey-export-db"
+          disabled={transferring}
+          onclick={() => void exportDatabase()}>Export .sqlite</button
+        >
+        <button
+          class="btn btn-sm"
+          data-testid="notey-import-db"
+          disabled={transferring}
+          onclick={() => dbField?.click()}>Replace from .sqlite</button
+        >
+        <input
+          class="file-field"
+          type="file"
+          accept=".sqlite,.db,.sqlite3,application/vnd.sqlite3,application/x-sqlite3"
+          aria-label="Choose a .sqlite database to replace this vault with"
+          data-testid="notey-import-db-file"
+          bind:this={dbField}
+          onchange={onDbPicked}
+        />
+      </div>
+      <p class="muted line">
+        The database file itself — open it in any SQLite browser to read the
+        rows notey stored. Replacing swaps this whole vault for the one in
+        the file, so it is the way to look at someone else's notes, not a
+        way to merge them.
+      </p>
+    {/if}
+
     {#if transferNote}
       <p class="line" data-testid="notey-transfer-note" aria-live="polite">{transferNote}</p>
     {/if}

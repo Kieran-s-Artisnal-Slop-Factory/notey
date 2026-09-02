@@ -1,7 +1,7 @@
 import { describe, expect, it } from 'vitest';
 import { memoryStore } from './memoryStore';
 import { zipBytes, zipEntries } from '../zip';
-import { describeImport, exportFileName, exportVault, importVault } from './transfer';
+import { dbFileName, describeImport, exportFileName, exportVault, importVault } from './transfer';
 import type { VaultStore } from './types';
 
 const text = (s: string): Uint8Array => new TextEncoder().encode(s);
@@ -53,6 +53,7 @@ describe('exportVault', () => {
 
   it('names the file for the day it was made', () => {
     expect(exportFileName(new Date('2026-09-02T10:00:00Z'))).toBe('notey-2026-09-02.zip');
+    expect(dbFileName(new Date('2026-09-02T10:00:00Z'))).toBe('notey-2026-09-02.sqlite');
   });
 });
 

@@ -962,6 +962,74 @@ test.describe('preferences', () => {
     expect((await app.read('Loose 2.md'))?.content).toBe('Mine, keep me.');
   });
 
+  test('the database dumps to a .sqlite file and replaces a vault from one', async ({ app }) => {
+    await openApp(app);
+    await app.write({ path: 'Work/Kept.md', kind: 'note', content: 'Rows to look at.' });
+    await openApp(app);
+
+    await runCommand(app.page, 'Settings');
+    const download = await Promise.all([
+      app.page.waitForEvent('download', { timeout: 30_000 }),
+      app.page.getByTestId('notey-export-db').click(),
+    ]).then(([d]) => d);
+    expect(download.suggestedFilename()).toMatch(/^notey-\d{4}-\d{2}-\d{2}\.sqlite$/);
+    const saved = (await download.path())!;
+    await expect(app.page.getByTestId('notey-transfer-note')).toContainText('Exported the database');
+
+    // It is a real SQLite file: any tool that reads the header reads this.
+    const head = readFileSync(saved).subarray(0, 16);
+    expect(new TextDecoder().decode(head)).toBe('SQLite format 3\0');
+
+    // A separate profile — someone else's browser — becomes this vault.
+    const other = await app.page.context().browser()!.newContext();
+    await other.addInitScript(() => {
+      try {
+        localStorage.setItem('notey-test-mode', '1');
+      } catch {}
+    });
+    const fresh = await other.newPage();
+    await fresh.goto('/');
+    await expect(fresh.getByTestId('notey-sheet')).toBeVisible({ timeout: 30_000 });
+    await expect(fresh.getByTestId('notey-booting')).toHaveCount(0, { timeout: 30_000 });
+    await fresh.keyboard.press('Control+k');
+    await fresh.locator('[data-testid="notey-palette-item"][data-label="Settings"]').click();
+    fresh.once('dialog', (d) => void d.accept());
+    await fresh.getByTestId('notey-import-db-file').setInputFiles(saved);
+    await expect(fresh.getByTestId('notey-transfer-note')).toContainText('Replaced the vault', {
+      timeout: 30_000,
+    });
+
+    // It reloads itself, because everything it was showing is gone.
+    await fresh.waitForFunction(() => (window as any).__notey !== undefined, undefined, {
+      timeout: 30_000,
+    });
+    await expect
+      .poll(
+        async () =>
+          (await fresh.evaluate(() => (window as any).__notey.read('Work/Kept.md')))?.content ?? '',
+        { timeout: 30_000 }
+      )
+      .toContain('Rows to look at.');
+    await other.close();
+  });
+
+  test('a file that is not a notey database is refused, and changes nothing', async ({ app }) => {
+    await openApp(app);
+    await app.write({ path: 'Safe.md', kind: 'note', content: 'Still here.' });
+    await openApp(app);
+    await runCommand(app.page, 'Settings');
+    app.page.once('dialog', (d) => void d.accept());
+    await app.page.getByTestId('notey-import-db-file').setInputFiles({
+      name: 'not-a-database.sqlite',
+      mimeType: 'application/vnd.sqlite3',
+      buffer: Buffer.from('SQLite format 3\0' + 'x'.repeat(1024)),
+    });
+    await expect(app.page.getByTestId('notey-transfer-note')).toContainText('Import failed', {
+      timeout: 30_000,
+    });
+    expect((await app.read('Safe.md'))?.content).toBe('Still here.');
+  });
+
   test('settings live in the palette and name the storage backend', async ({ app }) => {
     await openApp(app);
     await runCommand(app.page, 'Settings');

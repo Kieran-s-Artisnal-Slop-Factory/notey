@@ -45,7 +45,15 @@ import type { ChannelLike, LockManagerLike } from './fakePlatform';
 export const OWNER_LOCK = 'notey:vault-owner';
 export const VAULT_CHANNEL = 'notey:vault';
 
-export type ChangeOp = 'write' | 'create' | 'mkdir' | 'rename' | 'remove' | 'setMeta';
+export type ChangeOp =
+  | 'write'
+  | 'create'
+  | 'mkdir'
+  | 'rename'
+  | 'remove'
+  | 'setMeta'
+  /** The whole vault was replaced from a database file: start again. */
+  | 'reload';
 
 /** One thing that changed in the vault, as every tab hears it. */
 export interface Change {
@@ -67,9 +75,19 @@ type Op =
   | 'remove'
   | 'getMeta'
   | 'setMeta'
-  | 'usage';
+  | 'usage'
+  | 'exportDb'
+  | 'importDb';
 
-const MUTATIONS: ReadonlySet<Op> = new Set<Op>(['write', 'create', 'mkdir', 'rename', 'remove', 'setMeta']);
+const MUTATIONS: ReadonlySet<Op> = new Set<Op>([
+  'write',
+  'create',
+  'mkdir',
+  'rename',
+  'remove',
+  'setMeta',
+  'importDb',
+]);
 
 type Args = Record<string, unknown>;
 
@@ -124,6 +142,7 @@ export interface SharedVaultDeps {
 const DEFAULT_RETRY: readonly number[] = [300, 700, 1500, 3000, 6000];
 
 const NOT_ANSWERING = 'The tab holding the vault is not answering.';
+const NO_DB_FILE = 'This vault is not one database file.';
 
 interface Pending {
   id: number;
@@ -158,6 +177,9 @@ function changesOf(op: Op, args: Args): Change[] {
       return [{ op, path: String(args['from']), to: String(args['to']) }];
     case 'setMeta':
       return [{ op, path: String(args['key']) }];
+    case 'importDb':
+      // Everything changed at once; there is no path to name.
+      return [{ op: 'reload', path: '' }];
     default:
       return [];
   }
@@ -187,6 +209,12 @@ function runOn(store: VaultStore, op: Op, args: Args): Promise<unknown> {
       return store.setMeta(String(args['key']), String(args['value']));
     case 'usage':
       return store.usage ? store.usage() : Promise.resolve(null);
+    case 'exportDb':
+      return store.exportDb ? store.exportDb() : Promise.reject(new Error(NO_DB_FILE));
+    case 'importDb':
+      return store.importDb
+        ? store.importDb(args['bytes'] as Uint8Array)
+        : Promise.reject(new Error(NO_DB_FILE));
   }
 }
 
@@ -618,6 +646,8 @@ export function sharedVault(deps: SharedVaultDeps): SharedVault {
     getMeta: (key) => call<string | null>('getMeta', { key }),
     setMeta: (key, value) => call<void>('setMeta', { key, value }),
     usage: () => call<{ bytes: number } | null>('usage'),
+    exportDb: () => call<Uint8Array>('exportDb'),
+    importDb: (bytes) => call<{ files: number; notes: number }>('importDb', { bytes }),
 
     onChange(listener) {
       listeners.add(listener);

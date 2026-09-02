@@ -68,6 +68,11 @@ Additional things to keep in mind:
       overwrites — a clash is filed alongside. 345 unit tests in 21 files,
       50 Playwright cases.
 
+- [x] A raw `.sqlite` dump and load in Settings, for troubleshooting: the
+      export passes `integrity_check` in an external client, and a database
+      edited with another tool imports back. 345 unit tests in 21 files,
+      52 Playwright cases.
+
 ## For human
 
 This section is for me to keep track of what I need to manually review, feel

@@ -434,6 +434,104 @@ const ops: Record<string, (args: Record<string, unknown>) => unknown | Promise<u
     return null;
   },
 
+  /**
+   * The database as a `.sqlite` file — the bytes, not a rendering of them.
+   * `sqlite3_js_db_export` serialises whatever handle it is given, so this
+   * is the same call for every tier, and what comes out opens in any SQLite
+   * browser: the point of it is to see exactly the rows notey stored.
+   */
+  exportDb: () => {
+    const d = need();
+    const api = sqlite3Api;
+    if (!api) throw new Error('sqlite is not initialised');
+    return (
+      api as unknown as { capi: { sqlite3_js_db_export(p: number | undefined): Uint8Array } }
+    ).capi.sqlite3_js_db_export(d.pointer);
+  },
+
+  /**
+   * Replace this vault with the one in a `.sqlite` file — the other half of
+   * troubleshooting: someone sends their database, you open it here and see
+   * what they see.
+   *
+   * The file is read as a database of its own and its ROWS are copied over,
+   * rather than the live file being swapped underneath the VFS. That keeps
+   * this to one transaction on a database that is already open (no handles
+   * to juggle, nothing half-written if it fails), works the same on all
+   * three tiers, and means a file that is not a notey vault is refused with
+   * a reason instead of leaving a wreck behind.
+   */
+  importDb: ({ bytes }) => {
+    const incoming = bytes as Uint8Array;
+    const d = need();
+    const sqlite3 = sqlite3Api;
+    if (!sqlite3) throw new Error('sqlite is not initialised');
+    if (incoming.byteLength < 512) throw new Error('that file is too small to be a database');
+
+    const p = sqlite3.wasm.allocFromTypedArray(incoming);
+    const temp = new sqlite3.oo1.DB() as unknown as Db;
+    const rc = sqlite3.capi.sqlite3_deserialize(
+      (temp as unknown as { pointer: number }).pointer,
+      'main',
+      p,
+      incoming.byteLength,
+      incoming.byteLength,
+      sqlite3.capi.SQLITE_DESERIALIZE_FREEONCLOSE | sqlite3.capi.SQLITE_DESERIALIZE_RESIZEABLE
+    );
+    if (rc !== 0) {
+      temp.close();
+      throw new Error('that file is not an SQLite database');
+    }
+    try {
+      const held = temp.selectValue(
+        `SELECT 1 FROM sqlite_schema WHERE type = 'table' AND name = 'files'`
+      );
+      if (!held) throw new Error('that database has no notey vault in it');
+      const version = Number(temp.selectValue('PRAGMA user_version') ?? 0);
+      if (version > MIGRATIONS.length) {
+        throw new Error(
+          `that vault is from a newer notey (schema v${version}; this one knows v${MIGRATIONS.length})`
+        );
+      }
+      // An older vault is brought up to this schema before it is copied,
+      // so importing a backup from an earlier notey works.
+      migrate(temp);
+
+      const files = temp.exec({
+        sql: `SELECT path, kind, content, mime, bytes, mtime FROM files`,
+        rowMode: 'object',
+        returnValue: 'resultRows',
+      }) as Record<string, unknown>[];
+      const meta = temp.exec({
+        sql: `SELECT key, value FROM meta`,
+        rowMode: 'object',
+        returnValue: 'resultRows',
+      }) as Record<string, unknown>[];
+
+      d.transaction(() => {
+        d.exec({ sql: `DELETE FROM files` });
+        d.exec({ sql: `DELETE FROM meta` });
+        for (const row of files) {
+          d.exec({
+            sql: `INSERT INTO files (path, kind, content, mime, bytes, mtime)
+                  VALUES (?, ?, ?, ?, ?, ?)`,
+            bind: [row['path'], row['kind'], row['content'], row['mime'], row['bytes'], row['mtime']],
+          });
+        }
+        for (const row of meta) {
+          d.exec({ sql: `INSERT INTO meta (key, value) VALUES (?, ?)`, bind: [row['key'], row['value']] });
+        }
+      });
+      scheduleSnapshot();
+      return {
+        files: files.length,
+        notes: files.filter((row) => row['kind'] === 'note').length,
+      };
+    } finally {
+      temp.close(); // FREEONCLOSE frees the bytes allocated above
+    }
+  },
+
   usage: () => {
     const d = need();
     const pages = Number(d.selectValue('PRAGMA page_count') ?? 0);

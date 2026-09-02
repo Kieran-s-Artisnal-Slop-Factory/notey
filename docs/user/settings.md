@@ -79,6 +79,22 @@ importing an old backup can only ever add to what you have, and importing
 the same zip twice does nothing the second time. Notes open in another tab
 are left to that tab.
 
+## The database file, for troubleshooting
+
+Under the zip buttons, when notey is running in a browser, there are two
+more: **Export .sqlite** and **Replace from .sqlite**.
+
+**Export .sqlite** gives you notey's actual database. It opens in any SQLite
+browser, where `files` is every note, notebook and image with its path and
+its Markdown, exactly as notey stored it. That is the thing to send someone
+who is helping you when notes are not behaving.
+
+**Replace from .sqlite** goes the other way, and it **deletes everything in
+this vault** and becomes the one in the file — it asks first. It is for
+looking at someone else's notes as they see them, not for merging: use the
+zip for that. Every open tab reloads afterwards, because what they were
+showing is gone.
+
 ## Your vault
 
 This card tells you which storage notey actually got:

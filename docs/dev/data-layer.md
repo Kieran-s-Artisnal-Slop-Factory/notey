@@ -46,9 +46,16 @@ export interface VaultStore {
   getMeta(key: string): Promise<string | null>;
   setMeta(key: string, value: string): Promise<void>;
   usage?(): Promise<{ bytes: number } | null>;
+  exportDb?(): Promise<Uint8Array>;                 // the .sqlite file itself
+  importDb?(bytes: Uint8Array): Promise<{ files: number; notes: number }>;
   close?(): Promise<void>;
 }
 ```
+
+`exportDb` and `importDb` are optional because only a backend that HAS one
+database file can have them: the browser store does, the desktop store's
+vault is a folder of real files, and the difference is not something to
+pretend away. See [export.md](export.md) for what they are for.
 
 `loadAll` deliberately omits asset content: listing a vault must never carry
 image bytes. `list` includes it, and is only ever called on one note's
@@ -106,7 +113,9 @@ that one tab serve them:
   each follower's `VaultStore` is a proxy that posts `req` messages on the
   BroadcastChannel **`notey:vault`** and waits for `res`.
 - Every mutation — by the owner or served for a follower — is announced as
-  `changed` with a `Change[]` (`{ op, path, to? }`), and every tab's store
+  `changed` with a `Change[]` (`{ op, path, to? }`; the op `reload` means
+  the whole vault was replaced from a database file and names no path), and
+  every tab's store
   exposes `onChange`. The app debounces a full `loadAll` refresh 250 ms
   behind it (`scheduleRefresh`), never mid-save.
 - Settings names the backend accordingly: `sqlite (OPFS)` in the owner,

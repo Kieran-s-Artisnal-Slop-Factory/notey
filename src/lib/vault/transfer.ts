@@ -87,6 +87,11 @@ export function exportFileName(now = new Date()): string {
   return `notey-${now.toISOString().slice(0, 10)}.zip`;
 }
 
+/** The same, for the raw database: `notey-2026-09-02.sqlite`. */
+export function dbFileName(now = new Date()): string {
+  return `notey-${now.toISOString().slice(0, 10)}.sqlite`;
+}
+
 /**
  * A path from an archive, or null if it is not one this vault will take.
  * Foreign zips exist: an entry may be absolute, may climb out with `..`,

@@ -123,6 +123,14 @@ export interface VaultStore {
   setMeta(key: string, value: string): Promise<void>;
   /** Storage usage, when the backend can tell. */
   usage?(): Promise<{ bytes: number } | null>;
+  /**
+   * The database as a `.sqlite` file, and back. Only a backend that HAS a
+   * database file has these — the desktop build's vault is a folder, so
+   * there is nothing to dump. For troubleshooting: the file opens in any
+   * SQLite browser, and importing one replaces this vault wholesale.
+   */
+  exportDb?(): Promise<Uint8Array>;
+  importDb?(bytes: Uint8Array): Promise<{ files: number; notes: number }>;
   /** Release handles (tests; Tauri window close). */
   close?(): Promise<void>;
 }

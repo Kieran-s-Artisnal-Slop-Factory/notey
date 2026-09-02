@@ -119,6 +119,43 @@ It runs under `notey:vault-mutate` and skips notes another tab has open, so
 an import cannot interleave with another tab's rename or write over a note
 being edited elsewhere (see [data-layer.md](data-layer.md)).
 
+## The database itself
+
+Settings also has **Export .sqlite** and **Replace from .sqlite**, which are
+neither a backup nor a document: they are the browser's database file, for
+looking at someone's actual rows when their notes are behaving oddly.
+
+```mermaid
+flowchart LR
+  A[notey in a browser] -->|Export .sqlite| B[notey-2026-09-02.sqlite]
+  B --> C[any SQLite browser: files, meta]
+  B -->|Replace from .sqlite| D[notey somewhere else, now that vault]
+```
+
+- **Export** is `sqlite3_js_db_export` on the live handle
+  ([sqlite-worker.ts](../../src/lib/vault/sqlite-worker.ts)), which
+  serialises whatever database it is given — so it is one call for all
+  three storage tiers, and what comes out passes `PRAGMA integrity_check`
+  in an ordinary SQLite client.
+- **Import copies rows, it does not swap the file.** The incoming bytes are
+  opened as a database of their own with `sqlite3_deserialize`, checked
+  (does it have a `files` table? is its `user_version` one this build
+  knows?), brought up to the current schema with the same `migrate` an old
+  vault gets, and then its `files` and `meta` are copied into the live
+  database in ONE transaction. The alternative — `poolUtil.importDb`, which
+  writes the bytes straight into the OPFS handle — would mean closing and
+  reopening the live database, works only on the OPFS tier, and leaves a
+  wreck if the file turns out not to be a vault. This way a bad file is
+  refused with a reason and nothing has changed.
+- **It is destructive by design.** The zip import merges because a backup
+  should never cost you a note; this one replaces, because the point is to
+  see exactly what the other person sees. The confirm dialog says so.
+- **Every tab reloads afterwards.** `importDb` broadcasts a `reload` change
+  (see [data-layer.md](data-layer.md)); each tab flashes, suppresses its
+  pagehide flush — its open note belongs to a vault that no longer exists,
+  and writing it would put someone else's note into the imported vault —
+  and reloads.
+
 ## Known limits and decisions
 
 - **Downloads go through an anchor**, so under Tauri they land in the
@@ -135,4 +172,12 @@ being edited elsewhere (see [data-layer.md](data-layer.md)).
   want streaming.
 - **Import is additive only.** There is no "replace everything", because the
   destructive version of this button is one misclick from losing the lot;
-  delete what you do not want afterwards, in the palette.
+  delete what you do not want afterwards, in the palette. (The `.sqlite`
+  import IS that destructive version, which is why it is a separate button
+  with a confirm rather than an option on this one.)
+- **`.sqlite` export and import are browser-only.** The desktop vault is a
+  folder of real `.md` files, so there is no database to dump; the buttons
+  are not shown there, and the zip covers that case.
+- **The database crosses the tab channel as one array.** A follower's
+  export is structured-cloned from the owner tab. Fine at the size a
+  personal vault reaches; it is not a streaming API.

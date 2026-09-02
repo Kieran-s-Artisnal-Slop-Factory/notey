@@ -126,6 +126,8 @@ export function sqliteStore(): VaultStore {
     getMeta: (key) => call<string | null>('getMeta', { key }),
     setMeta: (key, value) => call<void>('setMeta', { key, value }),
     usage: () => call<{ bytes: number } | null>('usage'),
+    exportDb: () => call<Uint8Array>('exportDb'),
+    importDb: (bytes) => call<{ files: number; notes: number }>('importDb', { bytes }),
 
     /**
      * Let go of the database so another tab can have it.

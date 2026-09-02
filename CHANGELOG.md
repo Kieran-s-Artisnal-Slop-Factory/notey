@@ -72,6 +72,13 @@
   clashes is filed alongside under a free name, and running the same archive
   twice does nothing the second time.
 
+* **The database dumps to a `.sqlite` file, and one can be loaded back.**
+  In a browser, Settings also has **Export .sqlite** and **Replace from
+  .sqlite**: the real database, which opens in any SQLite browser so you can
+  read the rows notey actually stored. Loading one replaces the whole vault
+  (it asks first) and every open tab reloads — it is for seeing someone
+  else's notes as they see them, where the zip is for merging.
+
 ## Bug Fixes
 
 Found while building 0.1.0. The first three are in code ported from

@@ -46,6 +46,11 @@ Importing only ever adds:
 That makes it safe to import an old backup into a vault you have been using,
 and importing the same zip twice does nothing the second time.
 
+In a browser there are two more buttons beside these — **Export .sqlite** and
+**Replace from .sqlite** — which hand you notey's actual database rather than
+your notes as files. They are for troubleshooting, and replacing is
+destructive; [settings.md](settings.md) explains them.
+
 ## Gotchas
 
 - **The per-note exports are the note, not the record.** Frontmatter — tags,

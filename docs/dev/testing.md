@@ -55,7 +55,7 @@ npm test            # playwright test (builds first)
 | `vault/memoryStore.test.ts` | 6 | **The `VaultStore` contract**: implicit parents, `loadAll` omitting asset bytes, `create` refusing what `write` accepts, subtree rename and clash refusal, subtree delete, meta |
 | `notebook/drawing.test.ts` | 5 | The `.excalidraw.png` convention and the vendored font list |
 
-## The browser suite — 50 cases
+## The browser suite — 52 cases
 
 The fixture gives every test a **fresh browser context** (fresh OPFS, fresh
 worker), installs `localStorage['notey-test-mode'] = '1'` with an init script
@@ -86,7 +86,7 @@ genuinely shares them.
 | the page, in use | A click on blank paper puts the caret at the end of the writing; a breadcrumb opens the palette on that notebook |
 | frontmatter | Aliases are a field a rename fills in; a field can be a value, a list or YAML; a hand-written nested map survives an unrelated edit |
 | two tabs | Two tabs booting at once settle into exactly one owner and one follower; two tabs write two different notes and both persist, and the first lists the second's note without a reload; the same note in a second tab is read-only, follows the writer's saves, and is promoted when the writer moves on; closing one tab with a write still travelling hands the database on and the write lands anyway; the survivor keeps the vault across a reload; the blank page is one page, so a second tab gets a sheet of its own that stays its own after the first tab goes, while the shared sheet is left untouched. No case assumes which tab is the owner |
-| preferences | The blank page keeps what you type without writing to the vault, and filing lands it in the Pile; "reopen the last note" works; the paper can be a legal pad and the rule can go; green bar paper prints its bands and tractor-feed holes; the grain re-scales; Settings names the backend; the paper, the desk and the pen are chosen separately; the vault exports to a real download and imports back into a **separate browser profile**, and an import over a note that differs files it alongside |
+| preferences | The blank page keeps what you type without writing to the vault, and filing lands it in the Pile; "reopen the last note" works; the paper can be a legal pad and the rule can go; green bar paper prints its bands and tractor-feed holes; the grain re-scales; Settings names the backend; the paper, the desk and the pen are chosen separately; the vault exports to a real download and imports back into a **separate browser profile**, and an import over a note that differs files it alongside; the database dumps to a `.sqlite` whose first 16 bytes really are the SQLite header and which replaces a separate profile's vault, while a file that is not a database is refused without changing anything |
 
 ## Pitfalls the suite encodes
 
