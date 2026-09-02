@@ -440,8 +440,8 @@
   --desk-layers:
     var(--tex-pebble),
     var(--tex-creases),
-    radial-gradient(120% 90% at 50% 0%, rgb(255 255 255 / 0.06), transparent 70%),
-    linear-gradient(160deg, #2b2624 0%, #1b1817 60%, #241f1d 100%);
+    radial-gradient(120% 90% at 50% 0%, rgb(255 255 255 / 0.06), #00000060 70%),
+    linear-gradient(160deg, #141414 0%, #111111 60%, #241f1d 100%);
   --desk-blend: overlay, soft-light, normal, normal;
   --desk-size: calc(260px * var(--grain-scale)) calc(260px * var(--grain-scale)), calc(800px * var(--grain-scale)) calc(800px * var(--grain-scale)), auto, auto;
 }
@@ -453,8 +453,8 @@
   --desk-layers:
     var(--tex-pebble),
     var(--tex-creases),
-    radial-gradient(120% 90% at 50% 0%, rgb(255 236 210 / 0.09), transparent 70%),
-    linear-gradient(160deg, #4b2c1d 0%, #331d13 58%, #422619 100%);
+    radial-gradient(120% 90% at 50% 0%, rgba(255, 236, 210, 0.041), transparent 70%),
+    linear-gradient(160deg, #2e1408 0%, #1c100a 58%, #1f130d 100%);
   --desk-blend: overlay, soft-light, normal, normal;
   --desk-size: calc(260px * var(--grain-scale)) calc(260px * var(--grain-scale)), calc(800px * var(--grain-scale)) calc(800px * var(--grain-scale)), auto, auto;
 }
@@ -467,7 +467,7 @@
     var(--tex-pebble),
     var(--tex-creases),
     radial-gradient(120% 90% at 50% 0%, rgb(255 240 215 / 0.12), transparent 70%),
-    linear-gradient(160deg, #9d6a3d 0%, #7d5029 58%, #8f5f36 100%);
+    linear-gradient(160deg, #A0480E 0%, #7d5029 58%, #8f5f36 100%);
   --desk-blend: overlay, soft-light, normal, normal;
   --desk-size: calc(260px * var(--grain-scale)) calc(260px * var(--grain-scale)), calc(800px * var(--grain-scale)) calc(800px * var(--grain-scale)), auto, auto;
 }
