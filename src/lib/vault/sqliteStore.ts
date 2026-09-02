@@ -2,19 +2,18 @@
  * The browser VaultStore: a thin RPC proxy over the sqlite worker
  * (sqlite-worker.ts owns all SQL and the persistence tiers).
  *
- * ONE TAB AT A TIME, and not by choice. The OPFS sync-access-handle API
- * that the sqlite SAH-pool VFS needs exists only in dedicated workers, and
- * a SharedWorker can neither use it nor start a dedicated worker to do so
- * (Chrome does not define `Worker` in that scope). So the database cannot
- * be shared between tabs by any arrangement of workers, and a second tab
- * has to be handed the vault rather than given a copy of it — see the
- * hand-off in store.ts, which is what `VAULT_BUSY` below drives.
+ * ONE WORKER HOLDS THE DATABASE, and not by choice. The OPFS
+ * sync-access-handle API that the sqlite SAH-pool VFS needs exists only in
+ * dedicated workers, and a SharedWorker can neither use it nor start a
+ * dedicated worker to do so (Chrome does not define `Worker` in that
+ * scope). So this store is opened by ONE tab — the owner — and every other
+ * tab reaches the database by proxying through it; that is tabs.ts, and
+ * `VAULT_BUSY` below is what tells it the handles are still taken.
  */
 /*
- * The `?sharedworker` / `?worker` suffixes are the bundler's own way of
- * asking for a worker constructor. They are used instead of
- * `new SharedWorker(new URL(…))` because the URL form is not served as a
- * module in dev, and the shared worker then fails to fetch on every load.
+ * The `?worker` suffix is the bundler's own way of asking for a worker
+ * constructor, used instead of `new Worker(new URL(…))` because the URL
+ * form is not served as a module in dev.
  */
 import SqliteWorker from './sqlite-worker?worker';
 import type { FileRow, FileWrite, VaultStore } from './types';
@@ -120,6 +119,7 @@ export function sqliteStore(): VaultStore {
     read: (path) => call<FileRow | null>('read', { path }),
     list: (prefix) => call<FileRow[]>('list', { prefix }),
     write: (file: FileWrite) => call<FileRow>('write', { ...file }),
+    create: (file: FileWrite) => call<FileRow>('create', { ...file }),
     mkdir: (path) => call<void>('mkdir', { path }),
     rename: (from, to) => call<void>('rename', { from, to }),
     remove: (path) => call<void>('remove', { path }),
@@ -128,16 +128,35 @@ export function sqliteStore(): VaultStore {
     usage: () => call<{ bytes: number } | null>('usage'),
 
     /**
-     * Let go of the database so another tab can have it. The worker closes
-     * the connection, which releases the OPFS handles.
+     * Let go of the database so another tab can have it.
+     *
+     * It is TERMINATING the worker that frees the OPFS handles: the SAH
+     * pool keeps every handle open for its own lifetime, and `db.close()`
+     * does not touch them. The 'close' round-trip is only a courtesy so
+     * sqlite finishes what it was doing (it runs after every write posted
+     * before it), and a worker that never answers — stuck, or already
+     * gone — must not keep the next tab waiting for handles it will never
+     * get otherwise. So the reply is waited for briefly, and the worker is
+     * terminated no matter what.
      */
     async close() {
       if (!port) return;
-      await call('close').catch(() => {});
-      terminate?.();
-      port = null;
-      terminate = null;
-      greeted = false;
+      let timer: ReturnType<typeof setTimeout> | undefined;
+      try {
+        await Promise.race([
+          call('close'),
+          new Promise<void>((resolve) => {
+            timer = setTimeout(resolve, 1500);
+          }),
+        ]).catch(() => {});
+      } finally {
+        clearTimeout(timer);
+        terminate?.();
+        port = null;
+        terminate = null;
+        greeted = false;
+        failAll('vault closed');
+      }
     },
   };
 }

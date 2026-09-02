@@ -79,6 +79,12 @@ What happened is reported underneath, and stays there after the action.
   it, but a `[[link]]` to that title will find only one of them.
 - **A bulk action is a series of small writes.** If it is interrupted, some
   notes are done and some are not; the receipt line says how many landed.
+- **Notes open in another tab are left alone.** Tag, Move and Delete skip a
+  note another tab is writing, and the receipt says so: *N left alone: open
+  in another tab*. The same goes for the link rewrite after a rename.
+  Renaming or deleting a notebook refuses outright while a note inside it is
+  open in another tab — close it there first. A note you are only reading
+  in this tab cannot be deleted from here either.
 - **Search is substring, not stemmed.** "bake" will not find "baking". Tags
   are the tool for reliable recall.
 - **The tick boxes only appear in list views** — the Pile and inside a

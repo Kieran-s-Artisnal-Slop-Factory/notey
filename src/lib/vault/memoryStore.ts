@@ -47,6 +47,11 @@ export function memoryStore(seed: readonly FileWrite[] = []): VaultStore {
         .map((row) => ({ ...row }));
     },
 
+    async create(file) {
+      if (rows.has(file.path)) throw new Error(`create target exists: ${file.path}`);
+      return store.write(file);
+    },
+
     async write(file) {
       const at = nowIso();
       ensureParents(file.path, at);

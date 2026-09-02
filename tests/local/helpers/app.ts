@@ -10,6 +10,12 @@ import type { FileRow, FileWrite } from '../../../src/lib/vault/types';
 export interface App {
   page: Page;
   errors: string[];
+  /**
+   * Another tab of the same browser profile — the same vault, the same
+   * locks — with its console watched and the test hook reachable, like
+   * the first. Its errors fail the test too.
+   */
+  newTab(): Promise<App>;
   goto(path?: string): Promise<void>;
   /** Wait for hydration + the test hook. */
   ready(): Promise<void>;
@@ -35,46 +41,51 @@ export const test = base.extend<{ app: App }>({
         localStorage.setItem('notey-test-mode', '1');
       } catch {}
     });
-    const page = await context.newPage();
     const errors: string[] = [];
     const expected: RegExp[] = [];
-    page.on('console', (message) => {
-      if (message.type() === 'error') errors.push(message.text());
-    });
-    page.on('pageerror', (err) => errors.push(String(err)));
 
-    const hook = async <T>(body: string): Promise<T> => {
-      await page.waitForFunction(() => (window as any).__notey !== undefined, undefined, {
-        timeout: 15_000,
+    const wire = (page: Page): App => {
+      page.on('console', (message) => {
+        if (message.type() === 'error') errors.push(message.text());
       });
-      return page.evaluate(`(async () => ${body})()`) as Promise<T>;
-    };
+      page.on('pageerror', (err) => errors.push(String(err)));
 
-    const app: App = {
-      page,
-      errors,
-      async goto(path = '/') {
-        await page.goto(path);
-      },
-      async ready() {
+      const hook = async <T>(body: string): Promise<T> => {
         await page.waitForFunction(() => (window as any).__notey !== undefined, undefined, {
           timeout: 15_000,
         });
-        // Astro removes the `ssr` attribute when an island hydrates.
-        await page.waitForFunction(
-          () => document.querySelectorAll('astro-island[ssr]').length === 0,
-          undefined,
-          { timeout: 15_000 }
-        );
-      },
-      expectConsoleError(pattern) {
-        expected.push(pattern);
-      },
-      loadAll: () => hook(`(window).__notey.loadAll()`),
-      read: (path) => hook(`(window).__notey.read(${JSON.stringify(path)})`),
-      write: (file) => hook(`(window).__notey.write(${JSON.stringify(file)})`),
-      backend: () => hook(`(window).__notey.backend()`),
+        return page.evaluate(`(async () => ${body})()`) as Promise<T>;
+      };
+
+      return {
+        page,
+        errors,
+        newTab: async () => wire(await context.newPage()),
+        async goto(path = '/') {
+          await page.goto(path);
+        },
+        async ready() {
+          await page.waitForFunction(() => (window as any).__notey !== undefined, undefined, {
+            timeout: 15_000,
+          });
+          // Astro removes the `ssr` attribute when an island hydrates.
+          await page.waitForFunction(
+            () => document.querySelectorAll('astro-island[ssr]').length === 0,
+            undefined,
+            { timeout: 15_000 }
+          );
+        },
+        expectConsoleError(pattern) {
+          expected.push(pattern);
+        },
+        loadAll: () => hook(`(window).__notey.loadAll()`),
+        read: (path) => hook(`(window).__notey.read(${JSON.stringify(path)})`),
+        write: (file) => hook(`(window).__notey.write(${JSON.stringify(file)})`),
+        backend: () => hook(`(window).__notey.backend()`),
+      };
     };
+
+    const app = wire(await context.newPage());
 
     await use(app);
 

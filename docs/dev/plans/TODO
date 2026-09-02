@@ -52,6 +52,21 @@ Additional things to keep in mind:
       as editable frontmatter fields; a legible book; and tabs that hand the
       vault over instead of refusing to open. 303 unit tests, 41 Playwright
       cases.
+- [x] Fourth round: the hand-off is gone — tabs queue on a Web Lock, the
+      holder runs the sqlite worker and serves the others over a
+      BroadcastChannel (owner/follower, src/lib/vault/tabs.ts), and each
+      open note is its own Web Lock (src/lib/vault/noteLocks.ts): read-only
+      when another tab writes it, promoted when that tab moves on and this
+      one is visible, a per-tab blank page, bulk actions leaving held notes
+      alone, the pool probe in the worker so a failed init cannot delete
+      the vault; the Green bar paper (eight now); the tan leather desk
+      retuned to render as #a6430a; docs and changelog cleaned of the
+      hand-off. 323 unit tests in 20 files, 45 Playwright cases.
+
+- [x] Vault export/import: one zip of the whole vault (folders, `.md` files
+      and images) from Settings, and an additive import that never
+      overwrites — a clash is filed alongside. 345 unit tests in 21 files,
+      50 Playwright cases.
 
 ## For human
 
@@ -67,6 +82,12 @@ free to add to this
       CHANGELOG's Bug Fixes.
 - [ ] Run `npm run tauri:build` once on this machine to produce an installer
       (cargo check passes; the full bundle has not been run)
+- [ ] Decide what iOS gets. Safari suspends background tabs, so a follower
+      there waits on a suspended owner — today that means one tab at a time
+      on iOS, and the docs say so.
+- [ ] Try the two-tab flow by hand in a real browser: open one note in two
+      tabs, close the writer, watch the reader promote; close the owner tab
+      and check the other picks the vault up; the blank page in a second tab.
 
 ## Per change
 Required guidence to follow per change

@@ -336,21 +336,158 @@ test.describe('frontmatter', () => {
   });
 });
 
+/*
+ * Two tabs of one profile share one vault. The browser lets only one
+ * worker hold the database, so one tab serves the other over a channel
+ * (src/lib/vault/tabs.ts); which one is which depends on who opened
+ * first, and no test below assumes it.
+ */
 test.describe('two tabs', () => {
-  test('a second tab is offered the vault rather than an error', async ({ app }) => {
+  const saved = (page: Page) =>
+    expect(page.getByTestId('notebook-save-state')).toContainText('Saved', { timeout: 15_000 });
+
+  /** What the vault says it is, from each tab: exactly one goes through the other. */
+  async function roles(a: App, b: App): Promise<string[]> {
+    return (await Promise.all([a.backend(), b.backend()])).sort();
+  }
+
+  /** Type without waiting out the save chain — the caller wants it in flight. */
+  async function typeNow(page: Page, text: string): Promise<void> {
+    await page.locator('[data-testid="notebook-canvas"] [contenteditable="true"]').click();
+    await page.keyboard.type(text);
+  }
+
+  /** Poll the vault itself; the stamp is not a barrier under load. */
+  const vaultHas = (app: App, path: string) =>
+    expect.poll(async () => (await app.read(path))?.content ?? '', { timeout: 15_000 });
+
+  test('two tabs booting at once settle into one owner and one follower', async ({ app }) => {
+    const b = await app.newTab();
+    await Promise.all([openApp(app), openApp(b)]);
+    const both = await roles(app, b);
+    expect(both.filter((line) => line.includes('via another tab'))).toHaveLength(1);
+    expect(both.filter((line) => !line.includes('via another tab'))).toHaveLength(1);
+  });
+
+  test('two tabs write two different notes, and both persist', async ({ app }) => {
     await openApp(app);
-    await app.write({ path: 'Contested.md', kind: 'note', content: 'body' });
-    // A second page in the same profile cannot have the database — the
-    // OPFS handles are exclusive — so it must say so and offer to take it.
-    const second = await app.page.context().newPage();
-    await second.goto('/');
-    await expect(second.getByTestId('notey-sheet')).toBeVisible({ timeout: 30_000 });
-    await expect(second.getByTestId('notey-held-elsewhere')).toBeVisible({ timeout: 30_000 });
-    // Taking it over works, and the first tab steps aside.
-    await second.getByTestId('notey-take-over').click();
-    await expect(second.getByTestId('notey-held-elsewhere')).toHaveCount(0, { timeout: 30_000 });
-    await expect(app.page.getByTestId('notey-held-elsewhere')).toBeVisible({ timeout: 30_000 });
-    await second.close();
+    await newNote(app.page);
+    await setTitle(app.page, 'From A');
+    await typeInCanvas(app.page, 'Written in A.');
+    await saved(app.page);
+
+    const b = await app.newTab();
+    await openApp(b);
+    await newNote(b.page);
+    await setTitle(b.page, 'From B');
+    await typeInCanvas(b.page, 'Written in B.');
+    await saved(b.page);
+
+    // One vault, readable from either side.
+    await vaultHas(app, 'From B.md').toContain('Written in B.');
+    await vaultHas(b, 'From A.md').toContain('Written in A.');
+    // And the first tab lists the second's note without a reload.
+    await openPalette(app.page);
+    await expect(item(app.page, 'From B')).toBeVisible({ timeout: 10_000 });
+  });
+
+  test('the same note in a second tab is read-only, follows the writer, and is promoted', async ({ app }) => {
+    await openApp(app);
+    await newNote(app.page);
+    await setTitle(app.page, 'Shared');
+    await typeInCanvas(app.page, 'First tab text.');
+    await saved(app.page);
+
+    const b = await app.newTab();
+    await openNoteByLink(b, 'Shared');
+    await expect(b.page.getByTestId('notey-read-only')).toBeVisible({ timeout: 15_000 });
+    await expect(b.page.getByTestId('notebook-read-only')).toContainText('First tab text.');
+    await expect(b.page.getByTestId('notebook-title')).toBeDisabled();
+    await expect(b.page.getByTestId('notebook-save-state')).toContainText('Open in another tab');
+
+    // The writer keeps going; the reader sees it land.
+    await typeInCanvas(app.page, ' Then more.');
+    await saved(app.page);
+    await expect(b.page.getByTestId('notebook-read-only')).toContainText('Then more.', { timeout: 15_000 });
+
+    // The writer moves to the blank page; the reader becomes the writer.
+    await runCommand(app.page, 'Close this note');
+    await expect(b.page.locator('[data-testid="notebook-canvas"], [data-testid="notebook-source"]')).toBeVisible(
+      { timeout: 15_000 }
+    );
+    await expect(b.page.getByTestId('notey-read-only')).toHaveCount(0);
+    await typeInCanvas(b.page, ' From B now.');
+    await saved(b.page);
+    await vaultHas(app, 'Shared.md').toContain('From B now.');
+  });
+
+  test('closing one tab mid-write hands the database on and the write still lands', async ({ app }) => {
+    await openApp(app);
+    const b = await app.newTab();
+    await openApp(b);
+    // One of them is serving the other; which one is the browser's choice.
+    expect((await roles(app, b)).filter((r) => r.includes('via another tab'))).toHaveLength(1);
+    await newNote(b.page);
+    await setTitle(b.page, 'Survivor');
+    await typeInCanvas(b.page, 'Before.');
+    await saved(b.page);
+
+    // Type and pull the other tab out from under it, with the write still
+    // travelling: if A was serving, B has to finish the job itself.
+    await typeNow(b.page, ' After.');
+    await app.page.close();
+    await saved(b.page);
+    await vaultHas(b, 'Survivor.md').toContain('After.');
+  });
+
+  test('a tab left on its own keeps the vault across a reload', async ({ app }) => {
+    await openApp(app);
+    const b = await app.newTab();
+    await openApp(b);
+    await newNote(b.page);
+    await setTitle(b.page, 'Survivor');
+    await typeInCanvas(b.page, 'Written once.');
+    await saved(b.page);
+    await app.page.close();
+
+    await openNoteByLink(b, 'Survivor');
+    await expect(b.page.locator('[data-testid="notebook-canvas"], [data-testid="notebook-source"]')).toBeVisible(
+      { timeout: 30_000 }
+    );
+    // Nothing holds it any more, so it opens writable, and one more edit lands.
+    await expect(b.page.getByTestId('notey-read-only')).toHaveCount(0);
+    await typeInCanvas(b.page, ' And again.');
+    await saved(b.page);
+    await vaultHas(b, 'Survivor.md').toContain('And again.');
+  });
+
+  test('the blank page is one page: a second tab gets a sheet of its own', async ({ app }) => {
+    await openApp(app);
+    await typeInCanvas(app.page, 'Scratch in A.');
+
+    const b = await app.newTab();
+    await openApp(b);
+    const canvasB = b.page.locator('[data-testid="notebook-canvas"]');
+    await expect(canvasB).not.toContainText('Scratch in A.');
+    await typeInCanvas(b.page, 'Scratch in B.');
+
+    // Neither tab's words reach the other's page.
+    await expect(app.page.locator('[data-testid="notebook-canvas"]')).toContainText('Scratch in A.');
+    await expect(canvasB).not.toContainText('Scratch in A.');
+    // The shared sheet is untouched: A reloads and still has its own words.
+    await app.goto('/');
+    await app.ready();
+    await expect(app.page.locator('[data-testid="notebook-canvas"]')).toContainText('Scratch in A.', {
+      timeout: 30_000,
+    });
+
+    // B's sheet is its own and stays its own, even once A is gone and the
+    // shared page is free again.
+    await app.page.close();
+    await b.goto('/');
+    await b.ready();
+    await expect(canvasB).toContainText('Scratch in B.', { timeout: 30_000 });
+    await expect(canvasB).not.toContainText('Scratch in A.');
   });
 });
 
@@ -506,6 +643,20 @@ test.describe('organizing', () => {
     await app.page.getByTestId('notey-palette-delete').click();
     await expect.poll(async () => await app.read('One.md'), { timeout: 10_000 }).toBeNull();
     expect((await app.read('Two.md'))?.content).toContain('two');
+  });
+
+  test('deleting the open note leaves the blank page behind', async ({ app }) => {
+    await openApp(app);
+    await newNote(app.page);
+    await setTitle(app.page, 'Doomed');
+    await typeInCanvas(app.page, 'Not for long.');
+    await expect(app.page.getByTestId('notebook-save-state')).toContainText('Saved', { timeout: 10_000 });
+    app.page.once('dialog', (d) => void d.accept());
+    await runCommand(app.page, 'Delete this note');
+    await expect.poll(async () => await app.read('Doomed.md'), { timeout: 10_000 }).toBeNull();
+    // Back on the unfiled page, with a working editor.
+    await expect(app.page.getByTestId('notebook-title')).toHaveValue('', { timeout: 15_000 });
+    await expect(app.page.getByTestId('notebook-title')).toBeEnabled();
   });
 
   test('bulk: move ticked notes into a notebook', async ({ app }) => {
@@ -701,6 +852,27 @@ test.describe('preferences', () => {
     ).toEqual(['legal', 'off']);
   });
 
+  test('green bar paper prints its bands and tractor-feed holes', async ({ app }) => {
+    await openApp(app);
+    await runCommand(app.page, 'Settings');
+    await app.page.getByTestId('notey-page-greenbar').click();
+    await expect
+      .poll(() => app.page.evaluate(() => document.documentElement.dataset['page']))
+      .toBe('greenbar');
+    const printed = await app.page.evaluate(() => {
+      const before = getComputedStyle(document.querySelector('[data-testid="notey-sheet"]')!, '::before');
+      return { image: before.backgroundImage, repeat: before.backgroundRepeat };
+    });
+    // The bands are one repeating gradient; the holes are two radial ones
+    // that repeat down the edges only.
+    expect(printed.image).toContain('repeating-linear-gradient');
+    expect(printed.image.match(/radial-gradient/g)?.length).toBe(2);
+    expect(printed.repeat).toContain('repeat-y');
+    await app.goto('/');
+    await app.ready();
+    expect(await app.page.evaluate(() => document.documentElement.dataset['page'])).toBe('greenbar');
+  });
+
   test('the desk grain can be re-scaled', async ({ app }) => {
     await openApp(app);
     await runCommand(app.page, 'Settings');
@@ -715,6 +887,79 @@ test.describe('preferences', () => {
     expect(Number(await grainSize())).toBeCloseTo(0.4);
     await app.page.getByTestId('notey-grain-coarse').click();
     expect(Number(await grainSize())).toBeCloseTo(1);
+  });
+
+  test('the vault exports to a zip and imports back into an empty one', async ({ app }) => {
+    await openApp(app);
+    await app.write({ path: 'Work/Kept.md', kind: 'note', content: '---\ntags:\n  - x\n---\n\nThe body.' });
+    await app.write({ path: 'Loose.md', kind: 'note', content: 'On its own.' });
+    await openApp(app);
+
+    // Export: a real download, and the app says what went into it.
+    await runCommand(app.page, 'Settings');
+    const download = await Promise.all([
+      app.page.waitForEvent('download', { timeout: 30_000 }),
+      app.page.getByTestId('notey-export-vault').click(),
+    ]).then(([d]) => d);
+    expect(download.suggestedFilename()).toMatch(/^notey-\d{4}-\d{2}-\d{2}\.zip$/);
+    const saved = await download.path();
+    await expect(app.page.getByTestId('notey-transfer-note')).toContainText('Exported 2 notes');
+
+    // A second, separate browser profile: same app, empty vault.
+    const other = await app.page.context().browser()!.newContext();
+    await other.addInitScript(() => {
+      try {
+        localStorage.setItem('notey-test-mode', '1');
+      } catch {}
+    });
+    const fresh = await other.newPage();
+    await fresh.goto('/');
+    await expect(fresh.getByTestId('notey-sheet')).toBeVisible({ timeout: 30_000 });
+    await expect(fresh.getByTestId('notey-booting')).toHaveCount(0, { timeout: 30_000 });
+
+    await fresh.keyboard.press('Control+k');
+    await fresh.locator('[data-testid="notey-palette-item"][data-label="Settings"]').click();
+    await fresh.getByTestId('notey-import-file').setInputFiles(saved!);
+    await expect(fresh.getByTestId('notey-transfer-note')).toContainText('Imported 2 notes', {
+      timeout: 30_000,
+    });
+
+    // The notes are really in the other vault, frontmatter and all.
+    const rows = await fresh.evaluate(() => (window as any).__notey.loadAll());
+    const byPath = Object.fromEntries(
+      (rows as { path: string; content: string | null }[]).map((r) => [r.path, r.content])
+    );
+    expect(byPath['Work/Kept.md']).toContain('The body.');
+    expect(byPath['Work/Kept.md']).toContain('- x');
+    expect(byPath['Loose.md']).toBe('On its own.');
+
+    // Importing it again adds nothing.
+    await fresh.getByTestId('notey-import-file').setInputFiles(saved!);
+    await expect(fresh.getByTestId('notey-transfer-note')).toContainText('already here', {
+      timeout: 30_000,
+    });
+    await other.close();
+  });
+
+  test('importing over a note that differs files it alongside, never over the top', async ({ app }) => {
+    await openApp(app);
+    await app.write({ path: 'Loose.md', kind: 'note', content: 'Mine, keep me.' });
+    await openApp(app);
+    await runCommand(app.page, 'Settings');
+    const download = await Promise.all([
+      app.page.waitForEvent('download', { timeout: 30_000 }),
+      app.page.getByTestId('notey-export-vault').click(),
+    ]).then(([d]) => d);
+    const saved = await download.path();
+
+    // Change the note, then import the archive of how it used to be.
+    await app.write({ path: 'Loose.md', kind: 'note', content: 'Changed since.' });
+    await app.page.getByTestId('notey-import-file').setInputFiles(saved!);
+    await expect(app.page.getByTestId('notey-transfer-note')).toContainText('filed alongside', {
+      timeout: 30_000,
+    });
+    expect((await app.read('Loose.md'))?.content).toBe('Changed since.');
+    expect((await app.read('Loose 2.md'))?.content).toBe('Mine, keep me.');
   });
 
   test('settings live in the palette and name the storage backend', async ({ app }) => {

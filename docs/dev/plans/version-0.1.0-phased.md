@@ -150,7 +150,8 @@ with its unit tests green.
 1. Verbatim + tests: `notebook/footnotes.ts` (95 cases), `notebook/wiki.ts`
    (22), `zip.ts` (7), `fuzzy.ts`, `encode/base64.ts`, `notebook/export.ts`
    (16), `prism.ts`, `exportFile.ts`, `notebook/code-languages.ts`,
-   `vendor/excalidraw.ts`, `icons.ts` + `Icon.svelte`, `paths.ts`,
+   `vendor/excalidraw.ts`, `icons.ts` + `Icon.svelte` (both deleted in the
+   fourth round — the paper design never imported them), `paths.ts`,
    `db/persistence.ts` (as `lib/persistence.ts`).
 2. With edits: `markdown.ts` (wikiLinkHref → `/?note=`), `notebook/mermaid.ts`
    (id prefix `notey-mermaid-`), `notebook/math.ts`, `math/fonts.ts` +

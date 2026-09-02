@@ -26,11 +26,15 @@ desktop program that writes plain `.md` files to a folder you own.
 - **Search** over titles, aliases, tags, paths and bodies, with `tag:` and
   `book:` filters and a snippet of the matching line.
 - **Exports**: Markdown with images inlined, one self-contained HTML file,
-  print to PDF, and a zip of many notes at once.
-- **A desk you choose.** The paper (light or dark), the desk under it
-  (plain, or wood and leather textures generated in CSS rather than
-  downloaded) and the accent colour are three independent settings — a dark
-  desk can hold a light page.
+  print to PDF, a zip of many notes at once, and a zip of the whole vault —
+  folders, files and images — that imports straight back in.
+- **A desk you choose.** The paper (eight of them, light and dark), the
+  desk under it (plain, or wood and leather textures generated in CSS rather
+  than downloaded) and the accent colour are three independent settings — a
+  dark desk can hold a light page.
+- **As many tabs as you like.** One tab holds the database and serves the
+  others; a note has one writer at a time, and a tab that opens a note
+  another tab is writing reads it until that tab moves on.
 - **Offline**, installable, and durable — a service worker that precaches the
   shell and crawls the rest in the background.
 
@@ -85,9 +89,10 @@ arrive the first time you use them.
 ## Backups
 
 **The only copy of your notes is the browser they were made in** (or, on the
-desktop, the folder on your disk). Clearing site data deletes them. Export
-what matters — one note or a zip of many — and ask for persistent storage in
-Settings.
+desktop, the folder on your disk). Clearing site data deletes them. Settings
+has **Export everything** — one zip of the vault as folders and plain `.md`
+files, which **Import a zip** reads back into any browser — and a button to
+ask for persistent storage.
 
 ## Documentation
 

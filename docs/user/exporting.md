@@ -28,11 +28,33 @@ Open **View the Pile** or a notebook, tick the notes you want, and press
 with a file per note, named after its title — `Bread notes.md`, and `-2` when
 two titles clash.
 
+## Everything
+
+**Settings → Export everything** hands you one zip of the whole vault: your
+notebooks as folders, your notes as plain `.md` files inside them, and their
+images beside them. It is your notes as they actually are, so it is the one
+to keep as a backup — and **Import a zip** reads it straight back, into this
+browser or another one.
+
+Importing only ever adds:
+
+- a note that is not here yet arrives;
+- one that is already here, word for word, is left alone;
+- one that clashes but differs is filed alongside as `Loose 2`, so neither
+  copy is lost.
+
+That makes it safe to import an old backup into a vault you have been using,
+and importing the same zip twice does nothing the second time.
+
 ## Gotchas
 
-- **The exports are the note, not the record.** Frontmatter — tags, aliases,
-  dates — is not written into an exported file. Use the vault itself (or the
-  desktop app's real `.md` files) when you want that.
+- **The per-note exports are the note, not the record.** Frontmatter — tags,
+  aliases, dates — is not written into an exported `.md` or HTML file. The
+  whole-vault export in Settings is the other thing: it copies the files
+  exactly as the vault holds them, frontmatter and all.
+- **Import never overwrites, so it can leave you with two copies.** A note
+  that differs from the one in the archive is filed alongside rather than
+  replaced; delete whichever you do not want.
 - **The HTML file is self-contained; the PDF is not a file notey makes.** PDF
   goes through your browser's own print dialog, so page size, margins and the
   final filename are the browser's to decide.

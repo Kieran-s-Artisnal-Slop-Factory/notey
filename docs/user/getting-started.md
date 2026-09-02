@@ -50,6 +50,24 @@ drawings and footnotes, and the three ways of looking at a note: **Edit**,
 A note saves itself a moment after you stop typing. A small stamp in the
 corner says `Saved`.
 
+## More than one tab
+
+Open notey in as many tabs as you like; they all see the same vault, and a
+change in one shows up in the others a moment later. One rule: **a note has
+one writer at a time**. Open a note that another tab is writing and you get
+it read-only — the stamp says `Open in another tab`, the title and
+frontmatter are greyed out, the body is shown rendered, and it follows the
+other tab's saves as they land. When that tab moves on — to another note, to
+the blank page, or closes — the note becomes writable here, provided this
+tab is the one you are looking at. A tab you left in the background waits
+until you come back to it, so it never takes a note from the one in front of
+you.
+
+The blank page has one writer too. A second tab that cannot have it writes on
+a fresh sheet of its own, which lasts as long as that tab — and stays that
+tab's sheet, even after the first tab moves on, until you file it or clear
+it.
+
 ## Notebooks and the Pile
 
 - A **notebook** is a folder. Notes go in it, and folders can go in notebooks.
@@ -62,8 +80,9 @@ where a note lives.
 
 ## Light and lamplight
 
-notey follows your system by default. Settings has **Paper** (cream stock,
-ink) and **Lamplight** (the same desk, dimmed) if you want to pin one.
+notey follows your system by default. Settings has **Card** (cream stock,
+ink) and **Lamplight** (the same page at night) if you want to pin one — and
+six more papers, listed in [settings.md](settings.md).
 
 ## Where your notes live
 
@@ -81,10 +100,12 @@ If you would rather have plain files on your disk, that is what the
   search or in the Pile.
 - **Clearing site data deletes everything.** Notes live in this browser only.
   Export what matters, and consider Settings → *Ask for persistent storage*.
-- **One tab writes at a time.** Open notey twice and the second tab offers
-  to take the vault; the first goes read-only until you take it back. The
-  browser will not let two tabs share one database, so notey passes it
-  between them instead of pretending.
+- **A note you are only reading cannot be deleted from that tab.** Close
+  it in the tab that is writing it first. If the other tab deletes it while
+  you are reading, the page says so, and your next keystroke there files it
+  again.
+- **On iOS it is one tab at a time.** Safari suspends background tabs, and a
+  second tab waits on the suspended one until it wakes.
 - **Click anywhere on the page to start writing.** A click on blank paper
   puts the caret at the end of what is there.
 - **Deleting a note asks first, and is final.** There is no trash.

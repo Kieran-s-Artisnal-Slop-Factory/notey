@@ -29,6 +29,18 @@ describe('memoryStore (the VaultStore contract)', () => {
     expect((await store.read('.assets/x.png'))!.content).toBe('AAAA');
   });
 
+  it('create refuses a path that exists; write does not', async () => {
+    const store = memoryStore();
+    await store.init();
+    await store.create({ path: 'Untitled.md', kind: 'note', content: 'first' });
+    await expect(store.create({ path: 'Untitled.md', kind: 'note', content: 'second' })).rejects.toThrow(
+      /exists/
+    );
+    expect((await store.read('Untitled.md'))!.content).toBe('first');
+    await store.write({ path: 'Untitled.md', kind: 'note', content: 'third' });
+    expect((await store.read('Untitled.md'))!.content).toBe('third');
+  });
+
   it('rename moves a subtree and refuses an occupied target', async () => {
     const store = memoryStore();
     await store.init();

@@ -1,8 +1,9 @@
 # Exporting
 
 Three ways out for one note — Markdown, one self-contained HTML file, and the
-browser's print dialog — and a zip for many. All four are ported from
-`useful`'s notebook and are reached from the Ctrl+K palette.
+browser's print dialog — a zip for many, and a zip of the whole vault that
+also comes back in. The first four are ported from `useful`'s notebook and
+are reached from the Ctrl+K palette; the vault's own is in Settings.
 
 _Describes the code as of v0.1.0 (unreleased; schema v1) — verify against source when in doubt._
 
@@ -12,7 +13,8 @@ _Describes the code as of v0.1.0 (unreleased; schema v1) — verify against sour
 | --- | --- |
 | [src/lib/notebook/export.ts](../../src/lib/notebook/export.ts) | `markdownExport`, `NOTE_CSS`, `htmlExport`, `externalReferences`, `printDocument` |
 | [src/lib/notebook/mathFonts.ts](../../src/lib/notebook/mathFonts.ts) | Which KaTeX faces a rendered note actually uses |
-| [src/lib/zip.ts](../../src/lib/zip.ts) | A dependency-free stored-only zip writer |
+| [src/lib/zip.ts](../../src/lib/zip.ts) | A dependency-free stored-only zip writer, and `zipEntries` to read one back |
+| [src/lib/vault/transfer.ts](../../src/lib/vault/transfer.ts) | `exportVault`, `importVault`, `describeImport` — the whole vault, out and in |
 | [src/lib/notebook/bulk.ts](../../src/lib/notebook/bulk.ts) | `exportFileName` — sanitising and clash suffixes |
 | [src/lib/exportFile.ts](../../src/lib/exportFile.ts) | `downloadText`, `downloadBlob` |
 | [src/components/NoteyApp.svelte](../../src/components/NoteyApp.svelte) | `renderForExport`, `downloadHtml`, `printNote`, `runBulk` |
@@ -74,6 +76,49 @@ files inside already carry their images as base64, so there is little to
 squeeze, and every unzip — including the browser's own — reads stored entries.
 The name is `notes-YYYY-MM-DD.zip`.
 
+## The whole vault
+
+Settings has **Export everything** and **Import a zip**
+([transfer.ts](../../src/lib/vault/transfer.ts)). This is a different job
+from the exports above, and the difference is worth keeping straight:
+
+| | One note, or many | The whole vault |
+| --- | --- | --- |
+| What a file holds | the note as a document, images inlined, frontmatter dropped | the file exactly as the vault stores it, frontmatter and all |
+| Layout | one flat archive of titles | the folders as they are — `Work/Plan.md`, `Work/.assets/shot.png`, empty notebooks too |
+| Comes back in | no | yes |
+
+So the export is what the Tauri build already keeps in `Documents/Notey`,
+zipped: a backup, the way to carry a vault to another browser, and something
+you can simply unzip and read.
+
+Import **adds and never overwrites**, which is what makes it safe to run a
+stale backup into a live vault:
+
+```mermaid
+flowchart TD
+  A[entry in the archive] --> B{a path this vault can hold?}
+  B -->|no: .. or not a note| S[skipped, and counted]
+  B -->|yes| C{already there?}
+  C -->|no| N[create it]
+  C -->|same words| Z[nothing to do]
+  C -->|different| P[create alongside: Loose 2.md]
+```
+
+Three details that follow from that:
+
+- **Notes use `create`, not `write`**, so the vault itself refuses a path
+  that is taken and the clash is handled here rather than raced.
+- **An image whose name is taken is left alone.** Its name IS the reference
+  a note carries (`.assets/shot.png`), so it cannot be filed under another
+  one; what is already in the vault stays.
+- **Importing the same archive twice is a no-op**, and every path the second
+  run recognises is counted as "already here" rather than duplicated.
+
+It runs under `notey:vault-mutate` and skips notes another tab has open, so
+an import cannot interleave with another tab's rename or write over a note
+being edited elsewhere (see [data-layer.md](data-layer.md)).
+
 ## Known limits and decisions
 
 - **Downloads go through an anchor**, so under Tauri they land in the
@@ -85,3 +130,9 @@ The name is `notes-YYYY-MM-DD.zip`.
 - **PDF page size and margins are the browser's.** notey only supplies the
   stylesheet and the filename.
 - **Exports never write to the vault**, so exporting is always safe.
+- **Import holds the whole archive in memory** — it is one `Uint8Array` and
+  one pass. Fine for a personal vault; a vault of thousands of images would
+  want streaming.
+- **Import is additive only.** There is no "replace everything", because the
+  destructive version of this button is one misclick from losing the lot;
+  delete what you do not want afterwards, in the palette.

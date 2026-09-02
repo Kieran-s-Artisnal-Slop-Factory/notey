@@ -7,10 +7,13 @@
   Each note is a Markdown file with YAML frontmatter shown above the red rule
   (title on the left, frontmatter on the right), filed into notebooks
   (folders) or left in the Pile.
-* **Seven papers.** Card (cream stock), Lamplight, Plain (white, black
+* **Eight papers.** Card (cream stock), Lamplight, Plain (white, black
   ink), a yellow Legal pad with blue rules and a red margin, Blueprint (blue
-  on white) and Cyanotype (white on blue) with a drafting grid, and Black
-  with white ink. The red rule under the header can be switched off.
+  on white) and Cyanotype (white on blue) with a drafting grid, Black with
+  white ink, and Green bar — continuous-feed printer paper with pale green
+  bands three lines tall, a hairline every row and tractor-feed holes down
+  both edges that show the desk through. The red rule under the header can
+  be switched off.
 * **Frontmatter is real YAML, and is edited as such.** A field can hold a
   value, a list, or a nested map: one button cycles its shape, lists edit
   comma-separated like tags, and maps edit as YAML. A value nobody touched
@@ -49,18 +52,25 @@
   reloads without writing anything to the vault, and one Ctrl+K command files
   it into the Pile or any notebook. Settings can switch it to reopening the
   last note instead.
+* **Many tabs, one writer per note.** Tabs queue on a Web Lock for the
+  vault; the holder opens the sqlite worker (OPFS sync-access handles exist
+  only in dedicated workers) and serves the other tabs over a
+  BroadcastChannel, and when it closes the next tab takes over and the
+  others re-drive what was in flight. Each open note is a second Web Lock:
+  a note another tab is writing opens read-only, follows that tab's saves,
+  and becomes writable when it moves on — only in a visible tab, so a
+  forgotten background tab never takes a note off the one in front of you.
+  The blank page is locked the same way, with a per-tab sheet for a tab that
+  cannot have the shared one; bulk actions leave notes open elsewhere alone.
+  iOS suspends background tabs, so there it is one tab at a time.
 
-## Other
-
-* **A second tab is offered the vault instead of an error.** Only one tab
-  can hold the database — the OPFS sync-access handles the sqlite VFS needs
-  exist only in dedicated workers, and a SharedWorker can neither use them
-  nor start a worker that can — so tabs hand it over instead: the new tab
-  asks, the old one flushes and goes read-only, and either can take it back.
-  Two tabs therefore cannot write to one note, by construction.
-* Clicking anywhere on the blank page puts the caret at the end of the
-  writing, the way a real page has no "outside the text".
-* Breadcrumbs are links: each one opens the palette on that notebook.
+* **The whole vault exports to a zip, and imports back.** Settings has
+  **Export everything** — your notebooks as folders and your notes as plain
+  `.md` files with their images, exactly as the vault holds them — and
+  **Import a zip** to read one back, into this browser or another. Importing
+  only ever adds: a note already there word for word is left alone, one that
+  clashes is filed alongside under a free name, and running the same archive
+  twice does nothing the second time.
 
 ## Bug Fixes
 
@@ -105,8 +115,20 @@ Found while building 0.1.0. The first three are in code ported from
   has never been given a name is being named for the first time, not
   renamed, so no alias is kept — otherwise every note started life with
   `Untitled` in its alias list and cluttered every link lookup.
+* **A failed pool init could have deleted the vault.** sqlite-wasm's OPFS
+  pool removes its whole directory when installing the VFS fails, and
+  during a hand-over between tabs it fails whenever the old worker's file
+  handles are still held. The worker now probes every pool file with a
+  sync-access handle first and reports "busy" without installing anything,
+  so the tab retries instead of the pool wiping itself.
 
 ## Other
 
 * Repo structure modelled after useful: docs trees (dev/user), versioned
   plans with checkpoints, VERSION + CHANGELOG discipline, GitHub Pages CI.
+* **The tan leather desk is retuned.** It now renders as #a6430a (measured
+  #a74309 in Chromium); the base gradient is far darker than that because
+  the pebble grain sits on top with overlay, and the ink on it is cream.
+* Clicking anywhere on the blank page puts the caret at the end of the
+  writing, the way a real page has no "outside the text".
+* Breadcrumbs are links: each one opens the palette on that notebook.

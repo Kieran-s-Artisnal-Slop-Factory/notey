@@ -99,7 +99,7 @@ export function tauriStore(): VaultStore {
     }
   };
 
-  return {
+  const store: VaultStore = {
     backend: 'files (Documents/Notey)',
 
     async init() {
@@ -177,6 +177,13 @@ export function tauriStore(): VaultStore {
       };
     },
 
+    async create(file) {
+      if (await needFs().exists(abs(file.path), opts())) {
+        throw new Error(`create target exists: ${file.path}`);
+      }
+      return store.write(file);
+    },
+
     async mkdir(path) {
       await needFs().mkdir(abs(path), { ...opts(), recursive: true });
     },
@@ -207,4 +214,5 @@ export function tauriStore(): VaultStore {
       await needFs().writeTextFile(abs(META_FILE), JSON.stringify(meta, null, 2), opts());
     },
   };
+  return store;
 }

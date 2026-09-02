@@ -193,6 +193,12 @@
   const displayed = new Map<string, string>();
   /** Re-applies the ✏ affordance whenever Crepe re-renders an image block. */
   let blockObserver: MutationObserver | null = null;
+  /**
+   * Set once this component is on its way out. Mounting Crepe is async, so
+   * a page closed or switched mid-mount lands back here with `root` already
+   * unbound — everything after the await has to check.
+   */
+  let torn = false;
   /** The footnote workbench: notes are edited there, not in the canvas. */
   let footnotesOpen = $state(false);
   /** Which note it opens on, when it was opened from one. */
@@ -1170,6 +1176,14 @@
       listener.selectionUpdated(() => queueMicrotask(harvestFootnotes));
     });
     await crepe.create();
+    // Gone while that was happening: `root` is unbound and there is nothing
+    // to decorate or watch. destroyEditor has already run, so hand back
+    // what it could not see.
+    if (torn || !root) {
+      void crepe?.destroy();
+      crepe = null;
+      return;
+    }
     // Definitions in the loaded document are notes, not blocks to edit here.
     harvestFootnotes();
 
@@ -1329,6 +1343,7 @@
   });
 
   onDestroy(() => {
+    torn = true;
     void destroyEditor();
   });
 </script>

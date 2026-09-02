@@ -49,6 +49,8 @@
     onNoteAction,
     onBulk,
     onClose,
+    heldPaths = new Set<string>(),
+    readOnly = false,
   }: {
     /** A notebook path to open straight onto — what a breadcrumb passes. */
     startAt?: string | null;
@@ -70,6 +72,10 @@
       paths: string[],
       argument?: string
     ) => Promise<string>;
+    /** Notes some other tab has open right now (they open here read-only). */
+    heldPaths?: ReadonlySet<string>;
+    /** The open note is being written in another tab. */
+    readOnly?: boolean;
     onClose: () => void;
   } = $props();
 
@@ -134,10 +140,11 @@
     folders.filter((f) => f.parent_id === parent).sort((a, b) => a.title.localeCompare(b.title));
 
   function noteItem(note: Note): Item {
+    const where = note.parent_id ?? 'the Pile';
     return {
       id: 'note:' + note.id,
       label: displayTitle(note),
-      hint: note.parent_id ?? 'the Pile',
+      hint: heldPaths.has(note.id) ? `${where} · open in another tab` : where,
       path: note.id,
       run: () => {
         onOpenNote(note);
@@ -250,14 +257,21 @@
             close();
           },
         },
-        {
-          id: 'cmd:delete',
-          label: 'Delete this note',
-          run: () => {
-            onNoteAction('delete');
-            close();
-          },
-        }
+        readOnly
+          ? {
+              id: 'cmd:read-only',
+              label: 'Being written in another tab',
+              hint: 'writable here when that tab moves on',
+              run: () => close(),
+            }
+          : {
+              id: 'cmd:delete',
+              label: 'Delete this note',
+              run: () => {
+                onNoteAction('delete');
+                close();
+              },
+            }
       );
     }
     list.push({

@@ -19,7 +19,7 @@ _Describes the code as of v0.1.0 (unreleased; schema v1) — verify against sour
 | [src/components/CommandPalette.svelte](../../src/components/CommandPalette.svelte) | Ctrl+K — every command and every navigation |
 | [src/components/SettingsPanel.svelte](../../src/components/SettingsPanel.svelte) | Settings, as a view inside that palette |
 | [src/components/notebook/](../../src/components/notebook/) | The ported editor: `MarkdownEditor`, `MarkdownPreview`, three dialogs |
-| [src/lib/vault/](../../src/lib/vault/) | The storage seam and its three backends |
+| [src/lib/vault/](../../src/lib/vault/) | The storage seam, its three backends, and the two tab layers: `tabs.ts` (one database, many tabs) and `noteLocks.ts` (one writer per note) |
 | [src/lib/notebook/](../../src/lib/notebook/) | Pure note logic ported from useful: wiki links, footnotes, mermaid, export, bulk |
 | [src/lib/markdown.ts](../../src/lib/markdown.ts) | The one sanctioned Markdown pipeline (marked + DOMPurify + Prism) |
 | [src/lib/prefs.ts](../../src/lib/prefs.ts) | Per-device preferences and the unfiled scratch page |
@@ -40,21 +40,33 @@ flowchart TD
   A[index.astro] -->|client:only| B[NoteyApp island]
   B --> C{Tauri?}
   C -->|yes| D[tauriStore: real .md files]
-  C -->|no| E[sqliteStore proxy]
+  C -->|no| S[sharedVault: tabs.ts]
+  S -->|this tab holds notey:vault-owner| E[sqliteStore proxy]
+  S -->|another tab does| P[follower: req/res over BroadcastChannel]
   E --> F[sqlite-worker: OPFS SAH pool]
+  P -.-> F
   D & F --> G[loadAll → FileRow rows]
   G --> H[toNote: frontmatter split]
   H --> I[in-memory notes + folders]
-  I --> J[the page: title, frontmatter, editor]
+  I --> J[the page: title, frontmatter, editor — or a read-only preview]
   I --> K[Ctrl+K palette: commands, library, links, search]
-  J -->|autosave 400ms| L[noteContentOf → store.write]
+  J -->|autosave 1.5 s| L[noteContentOf → store.write]
   L --> G
+  F -->|changed| M[every tab: refresh 250 ms later]
+  M --> G
 ```
 
 The whole vault is read once into memory at boot and re-read after every
-write (`refreshFromRows`). That is deliberate: wiki links, backlinks and
-search all need every note's body, so there is no cheaper shape, and a
-personal vault is small enough that a full re-read is imperceptible.
+write (`refreshFromRows`) — and, 250 ms after any other tab's write, from
+the `changed` feed. That is deliberate: wiki links, backlinks and search all
+need every note's body, so there is no cheaper shape, and a personal vault
+is small enough that a full re-read is imperceptible.
+
+In the browser, tabs share one database through one of them: whichever
+holds the `notey:vault-owner` Web Lock opens the worker and serves the rest
+over a BroadcastChannel, and the next in the lock queue takes over when it
+goes. Which tab may *write* a note is a separate lock per open note. Both
+are in [data-layer.md](data-layer.md); the page's side is in [ui.md](ui.md).
 
 ## Directory map
 
@@ -64,13 +76,13 @@ src/
     NoteyApp.svelte          the app shell: the page and everything it owns
     CommandPalette.svelte    Ctrl+K: commands, library views, bulk actions
     SettingsPanel.svelte     settings, as a palette view
-    Icon.svelte              inline Lucide glyphs
     notebook/                ported editor + dialogs
   layouts/Layout.astro
   lib/
-    vault/                   types, model (paths), frontmatter, stores, search
+    vault/                   types, model (paths), frontmatter, stores, search,
+                             tabs (owner/follower), noteLocks, fakePlatform (test doubles)
     notebook/                pure note logic (wiki, footnotes, mermaid, export…)
-    markdown.ts prefs.ts paths.ts zip.ts fuzzy.ts exportFile.ts icons.ts
+    markdown.ts prefs.ts paths.ts zip.ts fuzzy.ts exportFile.ts
   pages/                     index.astro (the only route)
   styles/                    theme.css (tokens), global.css (base + utilities)
 ```
@@ -96,6 +108,13 @@ Each of these is load-bearing; the Playwright spec named in
   up one level, assets included.
 - **The editor is keyed on the open document, not on the path.** A rename
   changes the path; keying on it would rebuild the editor mid-typing.
+- **One tab writes a note at a time.** The tab with a note open holds
+  `notey:note:<path>`; a second tab sees it read-only and is promoted only
+  while visible, when the writer moves on. New notes are made with
+  `create`, which refuses an existing path, so two tabs cannot overwrite
+  each other's fresh note either.
+- **Page load takes nothing from another tab.** A remembered last note
+  that another tab is writing is not reopened; the page stays blank.
 - **Design tokens keep useful's names.** The ported editor consumes
   `--surface-color`, `--color-stamp`, `--space-*`; only the values are notey's.
 
@@ -114,8 +133,11 @@ Each of these is load-bearing; the Playwright spec named in
 - **The whole vault lives in memory.** Fine for a personal vault; a vault of
   tens of thousands of notes would want an index. Recorded in
   [far-fetched.md](plans/far-fetched.md) along with why FTS5 was not used.
-- **One tab at a time.** The OPFS SAH pool takes exclusive handles, so a
-  second tab is refused with a clear message rather than silently opening a
-  different database.
+- **One worker holds the database.** The OPFS SAH pool takes exclusive
+  handles that only a dedicated worker can have, so the browser build
+  routes every tab through the one that holds them rather than opening a
+  second database. The limits of that — iOS Safari suspends background
+  tabs, a crashed worker in a living tab is not noticed, every follower
+  refresh is a full read — are listed in [data-layer.md](data-layer.md).
 - **No sync.** The vault is one browser or one disk; the export is the
   escape hatch.

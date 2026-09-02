@@ -26,12 +26,19 @@
   } from '../lib/prefs';
   import { requestPersistentStorage, storageEstimate, type PersistState } from '../lib/persistence';
   import { openVaultStore } from '../lib/vault/store';
+  import { describeImport, exportFileName, exportVault, importVault } from '../lib/vault/transfer';
+  import { notesHeldElsewhere, platformLocks, VAULT_MUTATE_LOCK } from '../lib/vault/noteLocks';
+  import { downloadBlob } from '../lib/exportFile';
 
   let prefs = $state<Prefs>(loadPrefs());
   let backend = $state('…');
   let vaultBytes = $state<number | null>(null);
   let estimate = $state<{ usage: number; quota: number } | null>(null);
   let persistState = $state<PersistState | null>(null);
+  /** What the last export or import did, in one line, or what went wrong. */
+  let transferNote = $state<string | null>(null);
+  let transferring = $state(false);
+  let fileField = $state<HTMLInputElement | undefined>();
 
   const deskGroups = ['Plain', 'Wood', 'Leather'] as const;
   const desksIn = (group: (typeof deskGroups)[number]) => DESKS.filter((d) => d.group === group);
@@ -48,6 +55,64 @@
       estimate = await storageEstimate();
     })();
   });
+
+  /**
+   * The whole vault as a zip of the folders and files it would be on disk.
+   * A backup, a way to move to another browser, and something you can just
+   * unzip and read — the same shape the desktop build keeps on disk.
+   */
+  async function exportEverything(): Promise<void> {
+    transferring = true;
+    transferNote = null;
+    try {
+      const store = await openVaultStore();
+      const out = await exportVault(store);
+      downloadBlob(new Blob([out.bytes as BlobPart], { type: 'application/zip' }), exportFileName());
+      transferNote = `Exported ${out.notes} note${out.notes === 1 ? '' : 's'}` +
+        (out.assets > 0 ? ` and ${out.assets} image${out.assets === 1 ? '' : 's'}` : '') + '.';
+      vaultBytes = (await store.usage?.())?.bytes ?? vaultBytes;
+    } catch (err) {
+      transferNote = 'Export failed: ' + String(err);
+    } finally {
+      transferring = false;
+    }
+  }
+
+  /**
+   * Read a zip back in. Nothing is overwritten: a note already here with
+   * the same words is left alone, and one that clashes is filed alongside
+   * under a free name — so importing a stale backup can only ever add.
+   * Held under the vault's mutate lock, and notes another tab has open are
+   * left to that tab.
+   */
+  async function importEverything(file: File): Promise<void> {
+    transferring = true;
+    transferNote = null;
+    try {
+      const store = await openVaultStore();
+      const bytes = new Uint8Array(await file.arrayBuffer());
+      const locks = platformLocks();
+      const held = await notesHeldElsewhere(locks, null);
+      const run = (): Promise<string> =>
+        importVault(store, bytes, { held }).then(describeImport);
+      transferNote = locks
+        ? await locks.request(VAULT_MUTATE_LOCK, { mode: 'exclusive' }, run)
+        : await run();
+      vaultBytes = (await store.usage?.())?.bytes ?? vaultBytes;
+    } catch (err) {
+      transferNote = 'Import failed: ' + String(err);
+    } finally {
+      transferring = false;
+    }
+  }
+
+  function onFilePicked(event: Event): void {
+    const input = event.currentTarget as HTMLInputElement;
+    const file = input.files?.[0];
+    // Clear it, or picking the same file twice fires nothing the second time.
+    input.value = '';
+    if (file) void importEverything(file);
+  }
 
   function update(changes: Partial<Prefs>): void {
     prefs = savePrefs(changes);
@@ -187,6 +252,38 @@
       <strong data-testid="notey-backend">{backend}</strong>
       {#if vaultBytes !== null}<span class="muted"> · {mb(vaultBytes)}</span>{/if}
     </p>
+    <div class="row">
+      <button
+        class="btn btn-sm"
+        data-testid="notey-export-vault"
+        disabled={transferring}
+        onclick={() => void exportEverything()}>Export everything</button
+      >
+      <button
+        class="btn btn-sm"
+        data-testid="notey-import-vault"
+        disabled={transferring}
+        onclick={() => fileField?.click()}>Import a zip</button
+      >
+      <input
+        class="file-field"
+        type="file"
+        accept=".zip,application/zip"
+        aria-label="Choose a vault zip to import"
+        data-testid="notey-import-file"
+        bind:this={fileField}
+        onchange={onFilePicked}
+      />
+    </div>
+    <p class="muted line">
+      A zip of your notebooks and notes as plain .md files, images and all.
+      Importing adds to what is here and overwrites nothing — a note that
+      clashes is filed alongside.
+    </p>
+    {#if transferNote}
+      <p class="line" data-testid="notey-transfer-note" aria-live="polite">{transferNote}</p>
+    {/if}
+
     {#if backend.startsWith('files')}
       <p class="muted line">
         Plain .md files in Documents/Notey — back that folder up like any other.
@@ -224,6 +321,23 @@
     display: flex;
     flex-direction: column;
     gap: var(--space-2);
+  }
+
+  /* Buttons and their note, side by side until the panel is too narrow. */
+  .row {
+    display: flex;
+    flex-wrap: wrap;
+    align-items: center;
+    gap: var(--space-2);
+  }
+
+  /* The picker is driven by the button beside it, never shown itself. */
+  .file-field {
+    position: absolute;
+    width: 1px;
+    height: 1px;
+    opacity: 0;
+    pointer-events: none;
   }
 
   .group {

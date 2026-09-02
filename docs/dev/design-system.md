@@ -26,7 +26,7 @@ Three attributes on `<html>`, set before first paint by the script in
 
 | Attribute | Chooses | Values |
 | --- | --- | --- |
-| `data-page` | the **paper** — the sheet, its ink, and the chrome that must stay legible on it | `light` (card), `dark` (lamplight), `plain`, `legal`, `blueprint`, `blueprint-inverse`, `black` |
+| `data-page` | the **paper** — the sheet, its ink, and the chrome that must stay legible on it | `light` (card), `dark` (lamplight), `plain`, `legal`, `greenbar`, `blueprint`, `blueprint-inverse`, `black` |
 | `data-desk` | the **desk** the sheet lies on | `plain-light`, `plain-dark`, `wood-mahogany`, `wood-oak`, `wood-birch`, `leather-black`, `leather-rich`, `leather-tan`, `leather-cream` |
 | `data-accent` | the **pen** — buttons, links, focus | `ink`, `oxblood`, `forest`, `teal`, `aubergine`, `rust`, `slate`, `moss` |
 | `data-grain` | how large the desk's texture is drawn | `fine`, `medium`, `coarse` |
@@ -69,15 +69,43 @@ Each desk stacks those greys over a colour with `background-blend-mode`, so
 one tile dresses every variant. `background-attachment: fixed` keeps the
 desk still while the page scrolls.
 
+The blend means the colour you write is not the colour you see: the pebble
+layer sits on top with `overlay`, which roughly doubles a dark base. Tan
+leather is tuned to *render* as `#a6430a` — its `--bg-color` — while its
+base gradient (`#5b1f01` to `#571d01`) is far darker; the numbers were
+found by measuring the painted desk in Chromium (mean `#a74309`) rather
+than by naming the target. Its ink is cream (`--desk-ink: #f6e6d2`).
+
 They are tiles, so **`background-size` is the grain size**: `--grain-scale`
 multiplies every desk's tile at once, and `data-grain` sets it to 0.4, 0.7
 or 1. The default is the smallest, because at full size the leather read as
 stucco rather than hide.
 
 Some papers are *printed*, not just coloured: a legal pad's blue rules and
-red margin, a blueprint's two-scale grid. Those are painted by `.sheet`'s
-`::before` (and `::after` for the margin) from `--paper-lines` and
-`--paper-grid`, so no ported component needs to know which paper it is on.
+red margin, a blueprint's two-scale grid, green bar's stripes and holes.
+Those are painted by `.sheet`'s `::before` (and `::after` for the margin)
+from two layers each paper may define, so no ported component needs to know
+which paper it is on:
+
+| Slot | For | Size / repeat / position slots |
+| --- | --- | --- |
+| `--paper-lines` | ruling that follows the line height | `--paper-lines-size`, `--paper-lines-repeat`, `--paper-lines-position` |
+| `--paper-grid` | anything else printed on the sheet | `--paper-grid-size`, `--paper-grid-repeat`, `--paper-grid-position` |
+
+Each slot can hold a comma-separated list of gradients, and the size,
+repeat and position slots line up with it entry by entry. The repeat and
+position slots exist for **green bar** (`data-page='greenbar'`), continuous-
+feed printer paper: `--paper-lines` is a `repeating-linear-gradient` of
+pale green bands three lines tall (`--paper-band-color`) alternating with
+three lines of white; `--paper-grid` is three layers — a hairline rule
+every row, then two columns of `radial-gradient` tractor-feed holes, one
+down each edge, sized `1.1rem 0.5in` and repeated `repeat-y` only, so the
+holes step every half inch and never tile across. The holes are painted in
+`--bg-color`, the desk's flat colour, so they show the desk through. Eight
+papers in all, listed twice: `PAPERS` in `prefs.ts` (label, hint, scheme,
+swatch) and `SCHEMES` in `Layout.astro`, which is what the pre-paint script
+reads to pick the scheme — a stored paper missing from `SCHEMES` is treated
+as unset and the system paper is used.
 
 **The palette never sits on a texture.** Its panel is `--surface-raised-color`
 — a solid paper colour — so legibility does not depend on which desk is

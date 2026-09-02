@@ -28,9 +28,10 @@ interface Req {
 }
 
 /**
- * A connected tab. As a SharedWorker every tab talks to the SAME database
- * over its own port, which is what lets two tabs be open at once: the OPFS
- * handles are held once, here, instead of being fought over.
+ * The one tab this worker serves. Other tabs reach this database by
+ * proxying through that tab (see tabs.ts) — a dedicated worker is the only
+ * scope with the OPFS sync-access handles the VFS needs, and it belongs to
+ * exactly one page.
  */
 interface Client {
   id: number;
@@ -142,25 +143,112 @@ function scheduleSnapshot(): void {
 
 /* ── boot ───────────────────────────────────────────────────────────── */
 
+/** The pool's OPFS directory: sqlite-wasm's default is `.` + the name. */
+const POOL_NAME = 'notey';
+const POOL_DIR = '.' + POOL_NAME;
+const POOL_OPAQUE_DIR = '.opaque';
+
+/**
+ * Is every file in the pool free to take? True when this worker could
+ * open each one; the handles are closed again straight away so the pool
+ * can have them.
+ *
+ * This probe exists because of what `installOpfsSAHPoolVfs` does when it
+ * FAILS: it calls `removeVfs()`, which deletes the pool directory
+ * recursively — the whole vault. While another tab's worker holds the
+ * files that delete is refused by the browser, which is the only reason
+ * it has ever been survivable. During a hand-over between tabs the dead
+ * worker's handles are released one at a time, and an install attempt
+ * that fails on the first still-held file could reach the delete once the
+ * rest have gone. So the pool is never installed until the probe says the
+ * files are all free — nobody else can be opening (the caller holds the
+ * owner lock), so free now means free for the install.
+ *
+ * Only a file that refuses to OPEN counts as held. Not being able to reach
+ * the directory at all (no pool yet, or storage refused outright, as some
+ * private windows do) is reported as free: the install then either works
+ * or fails with the real error, which is what the caller should see.
+ */
+async function poolIsFree(): Promise<boolean> {
+  let dir: FileSystemDirectoryHandle;
+  try {
+    const root = await navigator.storage.getDirectory();
+    const vfsDir = await root.getDirectoryHandle(POOL_DIR);
+    dir = await vfsDir.getDirectoryHandle(POOL_OPAQUE_DIR);
+  } catch {
+    return true; // no pool yet (or none we can see): nothing to be held
+  }
+  const files: FileSystemFileHandle[] = [];
+  for await (const entry of (dir as unknown as AsyncIterable<[string, FileSystemHandle]>)) {
+    const handle = entry[1];
+    if (handle.kind === 'file') files.push(handle as FileSystemFileHandle);
+  }
+  for (const file of files) {
+    try {
+      const sah = await (
+        file as unknown as { createSyncAccessHandle(): Promise<{ close(): void | Promise<void> }> }
+      ).createSyncAccessHandle();
+      await sah.close();
+    } catch {
+      return false;
+    }
+  }
+  return true;
+}
+
+/** What the probe throws when a pool file is still someone else's. */
+class PoolHeld extends Error {
+  constructor() {
+    super('pool files are held');
+    this.name = 'PoolHeld';
+  }
+}
+
+/**
+ * Does this failure mean another worker has the files? Only two things
+ * do: our own probe saying so, and the browser refusing the exclusive
+ * handle (NoModificationAllowedError). Anything else — missing APIs, a
+ * storage quota or security refusal, a broken pool — is a real fault, and
+ * calling it "busy" would only make the caller retry it.
+ */
+function isHeld(err: unknown): boolean {
+  if (err instanceof PoolHeld) return true;
+  return (err as { name?: unknown } | null)?.name === 'NoModificationAllowedError';
+}
+
 async function init(): Promise<{ backend: string }> {
   if (db) return { backend };
   const sqlite3 = await sqlite3InitModule({ print: () => {}, printErr: () => {} });
   sqlite3Api = sqlite3;
-  const opfsSupported = typeof navigator !== 'undefined' && !!navigator.storage?.getDirectory;
+  // The pool needs sync access handles, not just OPFS: older Safari and
+  // Firefox have getDirectory without them, and those belong in the
+  // snapshot tier, not in a "vault busy" retry loop.
+  const opfsSupported =
+    typeof navigator !== 'undefined' &&
+    !!navigator.storage?.getDirectory &&
+    typeof (
+      globalThis as { FileSystemFileHandle?: { prototype?: { createSyncAccessHandle?: unknown } } }
+    ).FileSystemFileHandle?.prototype?.createSyncAccessHandle === 'function';
   try {
     if (!opfsSupported) throw new Error('no OPFS');
-    const pool = await sqlite3.installOpfsSAHPoolVfs({ name: 'notey' });
+    if (!(await poolIsFree())) throw new PoolHeld();
+    const pool = await sqlite3.installOpfsSAHPoolVfs({ name: POOL_NAME });
     db = new pool.OpfsSAHPoolDb('/notey.db') as unknown as Db;
     backend = 'opfs';
   } catch (err) {
     if (opfsSupported) {
-      // OPFS exists but the pool would not open — almost always another
-      // tab holding the exclusive sync-access handles. Falling back to a
-      // DIFFERENT storage tier here would fork the vault in two, so this
-      // is a hard stop instead.
-      throw new Error(
-        'The vault is already open in another tab (' + String(err) + '). Close it and reload.'
-      );
+      // OPFS exists but the pool would not open. Falling back to a
+      // DIFFERENT storage tier here would fork the vault in two, so either
+      // way this is a hard stop. Which kind matters: another tab's worker
+      // still holding the handles clears up a moment after that tab goes,
+      // so the caller retries (tabs.ts); anything else is a fault the
+      // caller must NOT retry, and the message has to name it.
+      if (isHeld(err)) {
+        throw new Error(
+          'The vault is already open in another tab (' + String(err) + '). Close it and reload.'
+        );
+      }
+      throw new Error('The vault database could not be opened: ' + String(err));
     }
     // No OPFS — in-memory database, restored from / mirrored to IndexedDB.
     try {
@@ -274,6 +362,24 @@ const ops: Record<string, (args: Record<string, unknown>) => unknown | Promise<u
     return row;
   },
 
+  create: ({ path, kind, content, mime, bytes }) => {
+    const d = need();
+    const at = nowIso();
+    let row: unknown;
+    d.transaction(() => {
+      const taken = d.selectValue(`SELECT 1 FROM files WHERE path = ?`, [path]);
+      if (taken) throw new Error(`create target exists: ${path}`);
+      ensureParents(d, path as string, at);
+      d.exec({
+        sql: `INSERT INTO files (path, kind, content, mime, bytes, mtime) VALUES (?, ?, ?, ?, ?, ?)`,
+        bind: [path, kind, content ?? null, mime ?? null, bytes ?? null, at],
+      });
+      row = { path, kind, content: content ?? null, mime: mime ?? null, bytes: bytes ?? null, mtime: at };
+    });
+    scheduleSnapshot();
+    return row;
+  },
+
   mkdir: ({ path }) => {
     const d = need();
     const at = nowIso();
@@ -365,25 +471,9 @@ async function dispatch(client: Client, data: Req): Promise<void> {
   }
 }
 
-/*
- * One file, two entry points. As a SharedWorker (every browser but Safari)
- * all tabs share this one database and nobody is locked out; as a plain
- * Worker there is one per tab, and the OPFS pool below refuses the second
- * — which is the old behaviour, kept only as a fallback.
- */
-if ('onconnect' in self) {
-  (self as unknown as SharedWorkerGlobalScope).onconnect = (event: MessageEvent) => {
-    const port = event.ports[0]!;
-    const client: Client = { id: nextClientId++, post: (m) => port.postMessage(m) };
-    port.onmessage = (message: MessageEvent<Req>) => void dispatch(client, message.data);
-    port.start();
-    serve(client);
-  };
-} else {
-  const client: Client = {
-    id: nextClientId++,
-    post: (m) => (self as unknown as Worker).postMessage(m),
-  };
-  self.onmessage = (event: MessageEvent<Req>) => void dispatch(client, event.data);
-  serve(client);
-}
+const client: Client = {
+  id: nextClientId++,
+  post: (m) => (self as unknown as Worker).postMessage(m),
+};
+self.onmessage = (event: MessageEvent<Req>) => void dispatch(client, event.data);
+serve(client);

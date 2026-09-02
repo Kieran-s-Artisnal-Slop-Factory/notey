@@ -105,6 +105,13 @@ export interface VaultStore {
   list(prefix: string): Promise<FileRow[]>;
   /** Upsert. Returns the stored row (with the stamped mtime). */
   write(file: FileWrite): Promise<FileRow>;
+  /**
+   * Like `write`, but REFUSES a path that already exists (atomically, in
+   * the sqlite store). New notes are made with this, so two tabs that both
+   * picked the same free name cannot overwrite one another: the second
+   * one hears "exists" and picks again.
+   */
+  create(file: FileWrite): Promise<FileRow>;
   /** Create a folder (and its parents). */
   mkdir(path: string): Promise<void>;
   /** Move a file, or a dir and everything under it. Fails if `to` exists. */

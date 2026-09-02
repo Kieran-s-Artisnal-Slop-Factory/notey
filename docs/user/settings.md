@@ -30,6 +30,9 @@ is no flash of the wrong one.
 - **Blueprint** — dark blue linework on white drafting paper, gridded.
 - **Cyanotype** — the same drawing printed the other way round.
 - **Black** — white ink on black, like a gel pen.
+- **Green bar** — continuous-feed printer paper: bands of pale green three
+  lines tall, a hairline every row, and tractor-feed holes down both edges
+  that show the desk through.
 
 Under the papers is a switch for **the red rule** under the page header.
 Turn it off and the header ends in a plain hairline instead.
@@ -63,6 +66,19 @@ Moss. It colours buttons, links, `[[wiki links]]`, the focus ring and the
 highlighted row in the command palette. The red rule stays red: it is the
 stamp, not the pen.
 
+## Your vault, out and back
+
+**Export everything** gives you one zip of the whole vault — notebooks as
+folders, notes as plain `.md` files, images beside them — named for the day
+you made it. Keep it as a backup, or open it in any other browser with
+**Import a zip**.
+
+Importing adds and never overwrites: a note already here word for word is
+left alone, and one that clashes is filed alongside under a free name. So
+importing an old backup can only ever add to what you have, and importing
+the same zip twice does nothing the second time. Notes open in another tab
+are left to that tab.
+
 ## Your vault
 
 This card tells you which storage notey actually got:
@@ -76,6 +92,10 @@ This card tells you which storage notey actually got:
   usually means a private window. Nothing will survive the tab.
 - **files (Documents/Notey)** — you are in the desktop app; your notes are
   real files.
+
+If notey is open in more than one tab, one of them holds the database and
+the others go through it, and the card says so: **sqlite (OPFS) — via
+another tab**. Nothing is different about your notes in that tab.
 
 **Ask for persistent storage** asks the browser not to evict notey when space
 runs short. The line under it is the browser's own estimate of what you are
@@ -97,7 +117,13 @@ using and what you are allowed.
   answer is shown next to the button.
 - **The memory-only tier is a warning, not a bug report.** Close the private
   window and the notes are gone; that is what a private window is for.
-- **Only one tab can write at a time.** Open notey twice and the second tab
-  says so and offers to take the vault; the first then goes read-only until
-  you hand it back. Your browser will not let two tabs share one database,
-  so this is a hand-off rather than a lock.
+- **Reopen the note I had open does not steal it.** If the note you left
+  in is being written in another tab when this one starts, this tab opens
+  blank instead. A `?note=` link still opens it, read-only.
+- **The blank page in a second tab is a fresh sheet.** Only one tab can
+  write the shared blank page. Another tab that opens on it gets a blank
+  page of its own that lasts as long as that tab, never touches the shared
+  one, and keeps being that tab's sheet while there is writing on it —
+  file it or clear it and the tab goes back to sharing.
+- **On iOS it is one tab at a time.** Safari suspends a background tab, and
+  a tab waiting on a suspended one waits for as long as it is suspended.

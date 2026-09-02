@@ -57,8 +57,14 @@ allowed.
   them. Nothing is uploaded anywhere, so nothing comes back.
 - **A private window keeps nothing.** notey will run, and Settings will say
   which storage tier it got, but the vault goes when the window closes.
-- **One tab at a time.** The vault takes an exclusive lock; a second tab says
-  so rather than opening a second, diverging copy.
+- **Many tabs, one database.** Only one tab can hold the database, so the
+  others read and write through it — Settings says *via another tab* in
+  those. Close the holder and another tab picks the database up on its own,
+  after a short pause. If a note is open in two tabs, only one of them
+  writes it; see [getting-started.md](getting-started.md).
+- **On iOS it is one tab at a time.** Safari suspends the tab you are not
+  looking at, and a tab that depends on a suspended one waits until it
+  wakes.
 - **Different browsers are different vaults.** Chrome and Firefox on the same
   machine do not share notes.
 - **The desktop app is the durable answer.** Real `.md` files in a folder you

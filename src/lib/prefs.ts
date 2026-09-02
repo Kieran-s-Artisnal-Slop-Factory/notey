@@ -17,7 +17,8 @@ export type PageTheme =
   | 'blueprint'
   | 'blueprint-inverse'
   | 'black'
-  | 'legal';
+  | 'legal'
+  | 'greenbar';
 
 export interface PaperOption {
   id: Exclude<PageTheme, 'system'>;
@@ -34,6 +35,7 @@ export const PAPERS: readonly PaperOption[] = [
   { id: 'dark', label: 'Lamplight', hint: 'the same, at night', scheme: 'dark', sample: '#2e2a21', ink: '#e8e1cd' },
   { id: 'plain', label: 'Plain', hint: 'white, black ink', scheme: 'light', sample: '#ffffff', ink: '#141414' },
   { id: 'legal', label: 'Legal', hint: 'yellow pad', scheme: 'light', sample: '#fbefa8', ink: '#1d1c17' },
+  { id: 'greenbar', label: 'Green bar', hint: 'tractor-feed stripes', scheme: 'light', sample: '#d3ead9', ink: '#1b201d' },
   { id: 'blueprint', label: 'Blueprint', hint: 'blue on white', scheme: 'light', sample: '#eef2f8', ink: '#14306a' },
   { id: 'blueprint-inverse', label: 'Cyanotype', hint: 'white on blue', scheme: 'dark', sample: '#123a76', ink: '#e8eef7' },
   { id: 'black', label: 'Black', hint: 'white ink on black', scheme: 'dark', sample: '#0a0a0a', ink: '#f4f4f4' },
@@ -251,9 +253,21 @@ export interface Scratch {
   body: string;
 }
 
-export function loadScratch(): Scratch {
+/**
+ * Where a blank page's text lives. `shared` is the one blank page every
+ * tab of this browser sees (localStorage); `tab` is a sheet of this tab's
+ * own (sessionStorage), handed to a tab that opened the blank page while
+ * another tab was already writing on the shared one.
+ */
+export type ScratchScope = 'shared' | 'tab';
+
+function scratchStorage(scope: ScratchScope): Storage {
+  return scope === 'tab' ? sessionStorage : localStorage;
+}
+
+export function loadScratch(scope: ScratchScope = 'shared'): Scratch {
   try {
-    const raw = localStorage.getItem(SCRATCH_KEY);
+    const raw = scratchStorage(scope).getItem(SCRATCH_KEY);
     if (!raw) return { title: '', body: '' };
     // Pre-0.1.0 scratches were a bare body string.
     if (!raw.startsWith('{')) return { title: '', body: raw };
@@ -267,10 +281,11 @@ export function loadScratch(): Scratch {
   }
 }
 
-export function saveScratch(scratch: Scratch): void {
+export function saveScratch(scratch: Scratch, scope: ScratchScope = 'shared'): void {
   try {
-    if (scratch.title === '' && scratch.body === '') localStorage.removeItem(SCRATCH_KEY);
-    else localStorage.setItem(SCRATCH_KEY, JSON.stringify(scratch));
+    const storage = scratchStorage(scope);
+    if (scratch.title === '' && scratch.body === '') storage.removeItem(SCRATCH_KEY);
+    else storage.setItem(SCRATCH_KEY, JSON.stringify(scratch));
   } catch {
     // Best-effort; the scratch buffer is a convenience, not vault data.
   }
