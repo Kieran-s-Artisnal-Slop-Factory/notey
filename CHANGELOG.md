@@ -144,6 +144,17 @@ Found while building 0.1.0. The first three are in code ported from
   sync-access handle first and reports "busy" without installing anything,
   so the tab retries instead of the pool wiping itself.
 
+* **The drawing canvas no longer types into the note behind it.** Opening a
+  drawing from the ✏ on an existing image left the caret in the note, so
+  Excalidraw's tool shortcuts — `5` for the arrow, `r` for the rectangle —
+  picked the tool *and* typed the character into what you were writing.
+  Focus now moves into the canvas as the dialog opens, and back to where it
+  was when it closes.
+* **Escape belongs to the drawing canvas.** It used to close the dialog,
+  which took the key away from Excalidraw — where Escape finishes a
+  multi-point line, drops a selection, or leaves a tool — and threw the
+  drawing away in the process. The dialog closes with Cancel or ×.
+
 ## Other
 
 * Repo structure modelled after useful: docs trees (dev/user), versioned

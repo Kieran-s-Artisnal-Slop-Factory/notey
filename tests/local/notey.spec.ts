@@ -827,6 +827,85 @@ test.describe('editor', () => {
     await expect(preview).toContainText('$5 with $10');
   });
 
+  test('the drawing canvas keeps the keyboard, and Escape belongs to it', async ({ app }) => {
+    await openApp(app);
+    await newNote(app.page);
+    await setTitle(app.page, 'Drawing');
+    await typeInCanvas(app.page, 'Before the drawing.');
+
+    // Open it the way the ✏ affordance on a drawing does: from INSIDE the
+    // text, with the caret still in the note. A real click on the toolbar
+    // button would move focus to the button and hide the bug.
+    await app.page.locator('[data-testid="notebook-canvas"] [contenteditable="true"]').click();
+    expect(
+      await app.page.evaluate(
+        () => !!document.activeElement?.closest('[data-testid="notebook-canvas"]')
+      )
+    ).toBe(true);
+    await app.page
+      .getByTestId('notebook-toolbar-draw')
+      .evaluate((el: HTMLElement) => el.click());
+    const dialog = app.page.getByTestId('notebook-drawing-dialog');
+    await expect(dialog).toBeVisible({ timeout: 30_000 });
+    // Excalidraw is a lazy chunk with fonts; wait for the canvas itself.
+    await expect(app.page.getByTestId('notebook-drawing-loading')).toHaveCount(0, {
+      timeout: 60_000,
+    });
+
+    // The note behind must not be what the keyboard talks to: Excalidraw's
+    // tool shortcuts are bare digits and letters.
+    const inNote = () =>
+      app.page.evaluate(
+        () => !!document.activeElement?.closest('[data-testid="notebook-canvas"]')
+      );
+    expect(await inNote()).toBe(false);
+
+    await app.page.keyboard.press('5'); // the arrow tool
+    await app.page.keyboard.press('r'); // the rectangle tool
+    expect(await inNote()).toBe(false);
+
+    // Escape is the canvas's (finishing a line, dropping a selection), so
+    // the dialog must still be open after it.
+    await app.page.keyboard.press('Escape');
+    await expect(dialog).toBeVisible();
+
+    // Nothing leaked into the note.
+    await app.page.getByRole('button', { name: 'Cancel' }).click();
+    await expect(dialog).toHaveCount(0);
+    const body = app.page.locator('[data-testid="notebook-canvas"]');
+    await expect(body).toContainText('Before the drawing.');
+    await expect(body).not.toContainText('5');
+    await expect(body).not.toContainText('Before the drawing.r');
+    await expect
+      .poll(async () => (await app.read('Drawing.md'))?.content ?? '', { timeout: 10_000 })
+      .not.toMatch(/Before the drawing\.[5r]/);
+  });
+
+  test('a drag out of the drawing canvas does not throw the drawing away', async ({ app }) => {
+    await openApp(app);
+    await newNote(app.page);
+    await setTitle(app.page, 'Dragging');
+    await app.page.getByTestId('notebook-toolbar-draw').click();
+    const dialog = app.page.getByTestId('notebook-drawing-dialog');
+    await expect(dialog).toBeVisible({ timeout: 30_000 });
+    await expect(app.page.getByTestId('notebook-drawing-loading')).toHaveCount(0, {
+      timeout: 60_000,
+    });
+
+    // Draw past the edge: the press starts on the canvas and the release
+    // lands on the backdrop, which delivers its click to the backdrop.
+    const canvas = await app.page.getByTestId('notebook-drawing-canvas').boundingBox();
+    await app.page.mouse.move(canvas!.x + canvas!.width / 2, canvas!.y + canvas!.height / 2);
+    await app.page.mouse.down();
+    await app.page.mouse.move(4, 4, { steps: 8 }); // out onto the backdrop
+    await app.page.mouse.up();
+    await expect(dialog).toBeVisible();
+
+    // A click that BEGINS on the backdrop still closes it.
+    await app.page.mouse.click(4, 4);
+    await expect(dialog).toHaveCount(0, { timeout: 10_000 });
+  });
+
   test('the editor face is remembered', async ({ app }) => {
     await openApp(app);
     await app.page.getByTestId('notebook-mode-source').click();

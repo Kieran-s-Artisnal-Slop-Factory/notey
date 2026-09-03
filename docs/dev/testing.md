@@ -56,7 +56,7 @@ npm test            # playwright test (builds first)
 | `vault/memoryStore.test.ts` | 6 | **The `VaultStore` contract**: implicit parents, `loadAll` omitting asset bytes, `create` refusing what `write` accepts, subtree rename and clash refusal, subtree delete, meta |
 | `notebook/drawing.test.ts` | 5 | The `.excalidraw.png` convention and the vendored font list |
 
-## The browser suite — 58 cases
+## The browser suite — 60 cases
 
 The fixture gives every test a **fresh browser context** (fresh OPFS, fresh
 worker), installs `localStorage['notey-test-mode'] = '1'` with an init script
@@ -82,7 +82,7 @@ genuinely shares them.
 | vault | A note survives a full reload; the file on disk is markdown with a frontmatter block |
 | linking | A missing link is listed, creates the note under its own name, and then backlinks; a rename pushes an alias, offers the rewrite with a count, and moves the file; `?note=` opens a note and offers Create for one that does not exist — without creating it |
 | organizing | Moving a note moves the file; deleting a notebook moves its notes up; deleting the note you have open leaves the blank page behind; bulk tag then delete touches only ticked rows; bulk move lands them in the notebook |
-| editor | Alt+0 cites at the cursor and files the definition; a mermaid fence renders; maths render while `$5 and $10` stays prose; the face is remembered across a reload |
+| editor | Alt+0 cites at the cursor and files the definition; a mermaid fence renders; maths render while `$5 and $10` stays prose; the face is remembered across a reload; the drawing canvas takes the keyboard so its tool shortcuts do not type into the note, and Escape stays the canvas's; a drag out of the canvas does not dismiss it |
 | exports | The HTML file is self-contained (no script, no link, no external URL beyond XML namespaces, fonts embedded); Markdown carries the title as an H1; a bulk export is one zip with both files |
 | the page, in use | A click on blank paper puts the caret at the end of the writing; a breadcrumb opens the palette on that notebook |
 | dropping a file | A dropped `.md` becomes a note and opens, keeping the frontmatter it arrived with; dropping while another note is open loses nothing from it; a name already taken is filed alongside; a file dropped while in a notebook lands in that notebook; something that is not markdown is refused out loud; and the browser build offers no "Edit existing file", which only the desktop can do |

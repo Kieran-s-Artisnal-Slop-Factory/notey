@@ -50,6 +50,10 @@ that block instead of adding another.
 
 ## Drawings
 
+**Escape belongs to the drawing canvas** — it is how you finish a line or
+drop a selection there — so the drawing dialog closes with **Cancel** or the
+×, not with Escape.
+
 **✏ Draw** opens an Excalidraw canvas — the same hand-drawn shapes, arrows and
 text as excalidraw.com, in a dialog. **Insert drawing** saves it as a PNG in
 the note, and the picture carries the drawing inside it, so it reopens for

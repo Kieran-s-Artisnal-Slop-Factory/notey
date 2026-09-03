@@ -8,6 +8,18 @@
    * Saving exports the scene to a PNG with `exportEmbedScene: true`, so the
    * drawing IS the image the note references AND the source it reopens
    * from. The caller decides what to do with the bytes.
+   *
+   * This dialog gives up two habits the others keep, because Excalidraw is
+   * an application rather than a form:
+   *
+   *  - **Escape does not close it.** Excalidraw needs Escape itself — it is
+   *    how you finish a multi-point line, drop a selection, or leave the
+   *    current tool. Closing on it would take the key away from the canvas
+   *    and throw the drawing out at the same time. The × and Cancel close.
+   *  - **Focus moves INTO the canvas on open.** Excalidraw's tool shortcuts
+   *    are single letters and digits (`5` is the arrow), and it listens on
+   *    the document, so if focus were left in the note behind, pressing `5`
+   *    would pick the arrow tool AND type "5" into the note.
    */
   import { onDestroy, onMount } from 'svelte';
   import {
@@ -31,6 +43,19 @@
   } = $props();
 
   let host: HTMLDivElement;
+  let modal: HTMLDivElement | undefined;
+  /** Where focus was before this took it, so it can be given back. */
+  let cameFrom: HTMLElement | null = null;
+  /**
+   * Whether the press that began this click landed on the backdrop, so a
+   * dismissing click has to START there rather than merely end there.
+   * Excalidraw captures the pointer while you draw, which already keeps a
+   * stroke that ends outside the canvas from reaching this handler; this
+   * covers the drags it does not capture — one begun on the modal chrome,
+   * or a selection dragged from the header — where letting go outside
+   * would otherwise throw the drawing away.
+   */
+  let pressedBackdrop = false;
   let root: { render: (node: unknown) => void; unmount: () => void } | null = null;
   let mod: ExcalidrawModule | null = null;
   /** Excalidraw's imperative handle — the live scene lives behind it. */
@@ -38,6 +63,8 @@
     getSceneElements: () => readonly unknown[];
     getAppState: () => Record<string, unknown>;
     getFiles: () => unknown;
+    /** Excalidraw's own "put the keyboard here", when the build has it. */
+    focusContainer?: () => void;
   } | null = null;
 
   let loading = $state(true);
@@ -45,6 +72,11 @@
   let error = $state<string | null>(null);
 
   onMount(async () => {
+    // Before anything is awaited: the note behind must stop being the
+    // thing the keyboard talks to, or the first keystroke lands in it.
+    cameFrom = document.activeElement as HTMLElement | null;
+    cameFrom?.blur?.();
+    modal?.focus();
     try {
       const { excalidraw, react, reactDom } = await loadExcalidraw();
       mod = excalidraw;
@@ -76,7 +108,11 @@
                 files: scene.files,
               }
             : null,
-          excalidrawAPI: (handle: typeof api) => (api = handle),
+          excalidrawAPI: (handle: typeof api) => {
+            api = handle;
+            // Now that the canvas exists, let it hold the keyboard.
+            handle?.focusContainer?.();
+          },
           // Saving and loading are the notebook's business.
           UIOptions: {
             canvasActions: { loadScene: false, saveToActiveFile: false, export: false },
@@ -94,6 +130,8 @@
     // React must tear its own tree down before Svelte removes the host.
     root?.unmount();
     root = null;
+    // Hand the keyboard back to whatever had it, if it is still there.
+    if (cameFrom && document.contains(cameFrom)) cameFrom.focus?.();
   });
 
   async function save() {
@@ -114,19 +152,26 @@
   }
 </script>
 
-<svelte:window onkeydown={(e) => e.key === 'Escape' && !saving && onCancel()} />
-
+<!-- No Escape handler on purpose: the canvas needs that key (see above). -->
 <div
   class="backdrop"
   role="presentation"
-  onclick={(e) => e.target === e.currentTarget && !saving && onCancel()}
+  onmousedown={(e) => (pressedBackdrop = e.target === e.currentTarget)}
+  onclick={(e) => {
+    const dismiss = pressedBackdrop && e.target === e.currentTarget && !saving;
+    pressedBackdrop = false;
+    if (dismiss) onCancel();
+  }}
 >
+  <!-- svelte-ignore a11y_no_noninteractive_element_to_interactive_role -->
   <div
     class="modal"
     role="dialog"
     aria-modal="true"
     aria-labelledby="drawing-title"
     data-testid="notebook-drawing-dialog"
+    tabindex="-1"
+    bind:this={modal}
   >
     <div class="head">
       <h3 id="drawing-title">{initial ? 'Edit drawing' : 'New drawing'}</h3>
@@ -147,7 +192,7 @@
     <div class="actions">
       <span class="muted small">
         Saved as a PNG with the drawing embedded — it reopens here for editing, and an export just
-        shows the image.
+        shows the image. Escape belongs to the canvas; close with Cancel.
       </span>
       <button type="button" class="btn" onclick={onCancel} disabled={saving}>Cancel</button>
       <button

@@ -134,6 +134,25 @@ The rich view renders maths through Crepe's LaTeX feature; Preview emits
 The stylesheet and faces are vendored in `public/math/` rather than pulled
 from the package, which would drag in sixty hashed font files.
 
+### The drawing dialog keeps two habits the others drop
+
+Excalidraw is an application, not a form, so this one modal behaves
+differently on purpose
+([DrawingDialog.svelte](../../src/components/notebook/DrawingDialog.svelte)):
+
+- **Escape does not close it.** Excalidraw needs that key — it finishes a
+  multi-point line, drops a selection, leaves the current tool. A dialog
+  that closes on Escape takes the key away from the canvas *and* discards
+  the drawing at the same time. Cancel and × close it.
+- **Focus moves into the canvas on open**, via Excalidraw's own
+  `focusContainer()`, with the previously focused element blurred before
+  the lazy chunk is even awaited. Its tool shortcuts are bare digits and
+  letters and it listens on the document, so a caret left in the note
+  behind means `5` picks the arrow tool AND types "5" into what you were
+  writing. Focus goes back where it came from when the dialog closes.
+  The ✏ affordance on an existing drawing is the path that made this
+  obvious: it is a click INSIDE the text, so the caret never left.
+
 ## Known limits and decisions
 
 - **A face switch loses undo history.** Each face starts fresh; only the text
