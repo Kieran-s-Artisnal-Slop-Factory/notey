@@ -36,6 +36,13 @@
   import { notesHeldElsewhere, platformLocks, VAULT_MUTATE_LOCK } from '../lib/vault/noteLocks';
   import { downloadBlob } from '../lib/exportFile';
 
+  let {
+    onChooseFolder = undefined,
+  }: {
+    /** Desktop only: pick the folder the vault lives in. */
+    onChooseFolder?: (() => Promise<string | null>) | undefined;
+  } = $props();
+
   let prefs = $state<Prefs>(loadPrefs());
   let backend = $state('…');
   let vaultBytes = $state<number | null>(null);
@@ -48,6 +55,8 @@
   let dbField = $state<HTMLInputElement | undefined>();
   /** Whether this backend is one database file (the browser's; not the desktop's). */
   let hasDbFile = $state(false);
+  /** The desktop's folder, as the backend line reports it: `files (<path>)`. */
+  const folder = $derived(/^files \((.*)\)$/.exec(backend)?.[1] ?? null);
 
   const deskGroups = ['Plain', 'Wood', 'Leather'] as const;
   const desksIn = (group: (typeof deskGroups)[number]) => DESKS.filter((d) => d.group === group);
@@ -397,10 +406,21 @@
       <p class="line" data-testid="notey-transfer-note" aria-live="polite">{transferNote}</p>
     {/if}
 
-    {#if backend.startsWith('files')}
+    {#if folder !== null}
       <p class="muted line">
-        Plain .md files in Documents/Notey — back that folder up like any other.
+        Plain .md files in a real folder — back it up like any other.
       </p>
+      {#if onChooseFolder}
+        <div class="row">
+          <button
+            class="btn btn-sm"
+            data-testid="notey-choose-folder"
+            disabled={transferring}
+            onclick={() => void onChooseFolder?.()}>Change folder…</button
+          >
+          <span class="muted">Notes already written stay where they are.</span>
+        </div>
+      {/if}
     {:else}
       <p class="muted line">
         Notes live in this browser only. Clearing site data deletes them.

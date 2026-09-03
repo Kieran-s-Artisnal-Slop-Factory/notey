@@ -73,6 +73,13 @@ Additional things to keep in mind:
       edited with another tool imports back. 345 unit tests in 21 files,
       52 Playwright cases.
 
+- [x] Drag and drop a `.md` file onto the page, in every build, sharing the
+      zip import's never-overwrite rule.
+- [x] Desktop: a chosen vault folder (first-run welcome, Settings picker),
+      `notey <file|folder>` opening in place by mounting the file's folder,
+      and a desktop-only `Edit existing file`. 363 unit tests in 22 files,
+      58 Playwright cases.
+
 ## For human
 
 This section is for me to keep track of what I need to manually review, feel
@@ -87,6 +94,14 @@ free to add to this
       CHANGELOG's Bug Fixes.
 - [ ] Run `npm run tauri:build` once on this machine to produce an installer
       (cargo check passes; the full bundle has not been run)
+- [ ] **Try the new desktop paths in a real window** — none of it has been
+      run, only compiled. `npm run tauri:dev`, then: a first launch shows
+      the welcome and honours "choose another folder"; `notey .` opens the
+      folder; `notey some/file.md` opens that file and a save lands in it;
+      `notey not-yet.md` starts one; `Ctrl+K → Edit existing file` picks a
+      file elsewhere and edits it there; Settings → Change folder… moves the
+      vault. The fs scope widening (`allow_folder`) is the part most likely
+      to need adjusting.
 - [ ] Decide what iOS gets. Safari suspends background tabs, so a follower
       there waits on a suspended owner — today that means one tab at a time
       on iOS, and the docs say so.

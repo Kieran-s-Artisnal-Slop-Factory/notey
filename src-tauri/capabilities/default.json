@@ -1,8 +1,10 @@
 {
   "$schema": "../gen/schemas/desktop-schema.json",
   "identifier": "default",
-  "description": "The main window: the vault under Documents/Notey and nothing else.",
-  "windows": ["main"],
+  "description": "The main window: the default vault under Documents/Notey. A folder chosen through the picker, or named on the command line, is added to this scope at run time by the allow_folder command (src/lib.rs) — the ACL can only name paths that were known when the app was built.",
+  "windows": [
+    "main"
+  ],
   "permissions": [
     "core:default",
     "dialog:default",
@@ -18,7 +20,14 @@
     "fs:allow-stat",
     {
       "identifier": "fs:scope",
-      "allow": [{ "path": "$DOCUMENT/Notey" }, { "path": "$DOCUMENT/Notey/**" }]
+      "allow": [
+        {
+          "path": "$DOCUMENT/Notey"
+        },
+        {
+          "path": "$DOCUMENT/Notey/**"
+        }
+      ]
     }
   ]
 }

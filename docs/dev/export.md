@@ -88,9 +88,9 @@ from the exports above, and the difference is worth keeping straight:
 | Layout | one flat archive of titles | the folders as they are — `Work/Plan.md`, `Work/.assets/shot.png`, empty notebooks too |
 | Comes back in | no | yes |
 
-So the export is what the Tauri build already keeps in `Documents/Notey`,
-zipped: a backup, the way to carry a vault to another browser, and something
-you can simply unzip and read.
+So the export is what the Tauri build already keeps in its folder, zipped:
+a backup, the way to carry a vault to another browser, and something you can
+simply unzip and read.
 
 Import **adds and never overwrites**, which is what makes it safe to run a
 stale backup into a live vault:

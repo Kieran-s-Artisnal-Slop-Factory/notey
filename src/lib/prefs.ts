@@ -131,6 +131,12 @@ export interface Prefs {
   accent: AccentName;
   /** The red rule under the page header. Some papers do not want one. */
   rule: boolean;
+  /**
+   * The folder the desktop build keeps notes in. Null until one has been
+   * chosen, which is what makes the welcome a first-run thing. Meaningless
+   * in a browser, where the vault is a database with no location.
+   */
+  vaultRoot: string | null;
 }
 
 const DEFAULTS: Prefs = {
@@ -144,6 +150,7 @@ const DEFAULTS: Prefs = {
   grain: 'fine',
   accent: 'ink',
   rule: true,
+  vaultRoot: null,
 };
 
 const KEY = 'notey-prefs';
@@ -185,6 +192,7 @@ export function loadPrefs(): Prefs {
       grain: isGrain(parsed.grain) ? parsed.grain : 'fine',
       accent: isAccent(parsed.accent) ? parsed.accent : 'ink',
       rule: parsed.rule !== false,
+      vaultRoot: typeof parsed.vaultRoot === 'string' ? parsed.vaultRoot : null,
     };
   } catch {
     return { ...DEFAULTS };

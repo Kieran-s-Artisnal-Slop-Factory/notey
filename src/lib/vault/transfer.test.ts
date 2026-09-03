@@ -1,7 +1,16 @@
 import { describe, expect, it } from 'vitest';
 import { memoryStore } from './memoryStore';
 import { zipBytes, zipEntries } from '../zip';
-import { dbFileName, describeImport, exportFileName, exportVault, importVault } from './transfer';
+import {
+  dbFileName,
+  describeDrop,
+  describeImport,
+  dropIntoVault,
+  exportFileName,
+  exportVault,
+  importVault,
+  isMarkdownFile,
+} from './transfer';
 import type { VaultStore } from './types';
 
 const text = (s: string): Uint8Array => new TextEncoder().encode(s);
@@ -156,6 +165,95 @@ describe('importVault', () => {
     await to.init();
     await expect(importVault(to, text('just some text'))).rejects.toThrow(/not a zip/);
     expect(await to.loadAll()).toEqual([]);
+  });
+});
+
+describe('dropIntoVault', () => {
+  const dropped = (name: string, text: string) => ({ name, text });
+  const taken = async (store: VaultStore): Promise<string[]> =>
+    (await store.loadAll()).map((r) => r.path);
+
+  it('files a dropped markdown file under its own name, text untouched', async () => {
+    const store = memoryStore();
+    await store.init();
+    const body = '---\ntags:\n  - kept\n---\n\nFrom somewhere else.';
+    const report = await dropIntoVault(store, [dropped('Notes from a talk.md', body)], null, []);
+    expect(report).toMatchObject({ opened: 'Notes from a talk.md', created: 1, already: 0 });
+    // Byte for byte: a file that already had frontmatter keeps it.
+    expect(await read(store, 'Notes from a talk.md')).toBe(body);
+  });
+
+  it('drops into the notebook you are in, not always the Pile', async () => {
+    const store = memoryStore();
+    await store.init();
+    await store.mkdir('Work');
+    const report = await dropIntoVault(store, [dropped('Plan.md', 'x')], 'Work', await taken(store));
+    expect(report.opened).toBe('Work/Plan.md');
+  });
+
+  it('a name already taken is filed alongside, and the original is untouched', async () => {
+    const store = memoryStore();
+    await store.init();
+    await store.write({ path: 'Plan.md', kind: 'note', content: 'mine' });
+    const report = await dropIntoVault(store, [dropped('Plan.md', 'theirs')], null, await taken(store));
+    expect(report.alongside).toEqual([{ from: 'Plan.md', to: 'Plan 2.md' }]);
+    expect(report.opened).toBe('Plan 2.md');
+    expect(await read(store, 'Plan.md')).toBe('mine');
+    expect(await read(store, 'Plan 2.md')).toBe('theirs');
+  });
+
+  it('the same file dropped twice is recognised, not duplicated', async () => {
+    const store = memoryStore();
+    await store.init();
+    const file = dropped('Plan.md', 'the same words');
+    await dropIntoVault(store, [file], null, await taken(store));
+    const again = await dropIntoVault(store, [file], null, await taken(store));
+    expect(again).toMatchObject({ created: 0, already: 1, opened: 'Plan.md' });
+    expect((await store.loadAll()).map((r) => r.path)).toEqual(['Plan.md']);
+  });
+
+  it('several at once all land, and the first is the one to open', async () => {
+    const store = memoryStore();
+    await store.init();
+    const report = await dropIntoVault(
+      store,
+      [dropped('One.md', '1'), dropped('Two.md', '2'), dropped('One.md', 'another one')],
+      null,
+      []
+    );
+    expect(report.created).toBe(3);
+    expect(report.opened).toBe('One.md');
+    // The third clashes with the first from the SAME drop.
+    expect(report.alongside).toEqual([{ from: 'One.md', to: 'One 2.md' }]);
+    expect(await read(store, 'One 2.md')).toBe('another one');
+  });
+
+  it('a name no filesystem would take is sanitised like any other title', async () => {
+    const store = memoryStore();
+    await store.init();
+    const report = await dropIntoVault(store, [dropped('a/b<c>.md', 'x')], null, []);
+    // Only the filename is used, the characters no disk takes become -,
+    // and a trailing one is trimmed the way sanitizeTitle trims any title.
+    expect(report.opened).toBe('b-c.md');
+  });
+});
+
+describe('isMarkdownFile', () => {
+  it('knows the extensions a note can arrive as', () => {
+    expect(['a.md', 'a.MD', 'a.markdown', 'a.mkd'].every(isMarkdownFile)).toBe(true);
+    expect(['a.txt', 'a.png', 'a.mdx', 'md', 'a.md.png'].some(isMarkdownFile)).toBe(false);
+  });
+});
+
+describe('describeDrop', () => {
+  it('says what happened in one line', () => {
+    expect(describeDrop({ opened: 'A.md', created: 2, already: 0, alongside: [] })).toBe(
+      'Added 2 notes.'
+    );
+    expect(
+      describeDrop({ opened: 'A.md', created: 1, already: 1, alongside: [{ from: 'A.md', to: 'A 2.md' }] })
+    ).toBe('Added 1 note. 1 already here. Filed alongside: A 2.');
+    expect(describeDrop({ opened: null, created: 0, already: 0, alongside: [] })).toBe('Nothing to add.');
   });
 });
 

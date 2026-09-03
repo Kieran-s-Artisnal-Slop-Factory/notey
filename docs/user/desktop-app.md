@@ -6,8 +6,13 @@ _Describes the code as of v0.1.0 (unreleased; schema v1) — verify against sour
 
 ## Where your notes are
 
-`Documents/Notey`. Notebooks are folders, notes are `.md` files, and a note's
-images sit in a `.assets` folder beside it:
+Wherever you say. The first time you open the desktop app it tells you where
+it is about to put them — `Documents/Notey` unless you say otherwise — and
+offers to put them somewhere else. You can move it later under **Settings →
+Your vault → Change folder…**, and notes already written stay where they are.
+
+Notebooks are folders, notes are `.md` files, and a note's images sit in a
+`.assets` folder beside it:
 
 ```
 Documents/Notey/
@@ -50,6 +55,36 @@ Go ahead — they are ordinary Markdown. A file written by hand, with no
 frontmatter at all, opens fine; notey adds a block the first time it saves.
 Read the gotchas first, though.
 
+### Opening one file, from anywhere
+
+The desktop app is also a plain Markdown editor:
+
+```bash
+notey ~/projects/readme.md    # open that file, and save back to it
+notey ~/projects              # work in that folder for now
+notey ~/projects/new.md       # start a file that is not there yet
+```
+
+`Ctrl+K → Edit existing file` does the same thing with a file picker. (You
+will not find that command in the browser: a web page cannot write back to a
+file on your disk.)
+
+In every case notey **works in that folder** — your edits land in the file
+you named, not in your notes folder. The folder's other `.md` files become
+notes too, so `[[links]]`, search and images work normally while you are
+there. It is for the session only: your own notes folder is back next time
+you launch, and Settings still names it.
+
+## Dropping a file in
+
+Drag a `.md` file onto the page — from your desktop, a mail attachment,
+anywhere — and it becomes a note and opens. This works in the browser too.
+
+It lands in the notebook you are in, or the Pile if you are not in one, and
+the hint that appears while you drag says which. A name already taken is
+filed alongside as `Name 2` rather than written over, and dropping a file you
+already have, unchanged, does nothing.
+
 ## Building it yourself
 
 You need Rust installed, then:
@@ -67,9 +102,14 @@ the dev server with hot reload.
 - **notey does not watch the folder.** If you edit a note in another editor
   while notey has it open, notey will not notice, and its next save will
   write over your change. Close the note in notey (or reopen the app) before
-  editing it elsewhere.
-- **The vault path is fixed** at `Documents/Notey` in this version. Choosing a
-  folder is a later feature.
+  editing it elsewhere. Worth remembering when you point notey at a project
+  folder you are also working in.
+- **Moving your notes folder does not move the notes.** Choosing a new
+  folder points notey at it; what you already wrote stays in the old one.
+  Use **Export everything** and **Import a zip** in Settings to carry them.
+- **Opening a file from elsewhere shows you that folder, not your notes.**
+  That is the point — but it does mean the palette lists that folder's files
+  until you launch notey again.
 - **Files notey does not understand are left alone** — a stray `.txt`, a
   `.git` folder — and it will not show them. But they *do* move when you
   rename the folder they are in, and they *do* go with it if you delete that

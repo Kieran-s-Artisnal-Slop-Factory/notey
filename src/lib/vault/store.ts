@@ -43,8 +43,13 @@ function newTabId(): string {
 
 async function start(): Promise<VaultStore> {
   if (isTauri()) {
-    const { tauriStore } = await import('./tauriStore');
-    const store = tauriStore();
+    // Which folder is a question of its own (a launch argument, the folder
+    // you chose, or the default) — desktop.ts answers it.
+    const [{ tauriStore }, { resolveDesktopVault }] = await Promise.all([
+      import('./tauriStore'),
+      import('./desktop'),
+    ]);
+    const store = tauriStore((await resolveDesktopVault()).root);
     await store.init();
     return store;
   }
@@ -104,6 +109,28 @@ async function start(): Promise<VaultStore> {
   });
   await vault.init();
   return vault;
+}
+
+/**
+ * Desktop only: mount another folder as the vault, for this session.
+ *
+ * This is what "Edit existing file" and the folder picker do. The old
+ * store is closed first, and the singleton is replaced, so every later
+ * `openVaultStore()` — the app's, Settings', the test hook's — gets the
+ * new one. Not for the browser, where there is one database and nowhere
+ * else for it to be.
+ */
+export async function remountVault(root: string): Promise<VaultStore> {
+  const previous = opened ? await opened.catch(() => null) : null;
+  await previous?.close?.().catch(() => {});
+  const next = (async () => {
+    const { tauriStore } = await import('./tauriStore');
+    const store = tauriStore(root);
+    await store.init();
+    return store;
+  })();
+  opened = next;
+  return next;
 }
 
 /** Open the vault, once per page. */

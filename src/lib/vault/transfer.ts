@@ -1,25 +1,33 @@
 /**
- * The whole vault, out to a zip and back.
+ * Notes arriving from outside, and the whole vault going out.
  *
- * The export is not a database dump: it is the vault as it would look on
- * disk — `Work/Plan.md` at `Work/Plan.md`, its images beside it in
- * `Work/.assets/`, empty notebooks as empty folders. So the same archive
- * is a backup, the way to carry notes to another browser, and something
- * you can simply unzip and read in any editor. It is exactly what the
- * Tauri build already keeps in `Documents/Notey`.
+ * OUT: the export is not a database dump, it is the vault as it would look
+ * on disk — `Work/Plan.md` at `Work/Plan.md`, its images beside it in
+ * `Work/.assets/`, empty notebooks as empty folders. So one archive is a
+ * backup, the way to carry notes to another browser, and something you can
+ * simply unzip and read. It is what the Tauri build keeps on disk anyway.
  *
- * Import NEVER destroys anything. A note that is already there with the
- * same words is left alone; one that clashes is filed alongside under a
- * free name, because two copies is a nuisance and a lost draft is not.
- * That makes importing the same archive twice a no-op rather than a
- * duplicate, and importing a stale backup safe.
+ * IN: two doors — a zip of a vault, and a `.md` file dropped on the page —
+ * and one rule for both, `fileIncomingNote`: NEVER overwrite. A note
+ * already here word for word is nothing to do; one that clashes is filed
+ * alongside under a free name, because two copies is a nuisance and a lost
+ * draft is not. So importing the same archive twice is a no-op rather than
+ * a pile of duplicates, and dropping a file you already have is harmless.
  *
  * Pure apart from the store it is handed: unit-tested against memoryStore.
  */
 import { zipBytes, zipEntries } from '../zip';
 import { ASSET_DIR } from '../notebook/assets';
 import { decodeBytes, encodeBytes } from '../encode/base64';
-import { isAssetPath, nameOf, normalizePath, parentOf, stemOf, uniqueNotePath } from './model';
+import {
+  isAssetPath,
+  nameOf,
+  normalizePath,
+  notePath,
+  parentOf,
+  stemOf,
+  uniqueNotePath,
+} from './model';
 import type { FileRow, VaultStore } from './types';
 
 export interface VaultExport {
@@ -80,6 +88,118 @@ export async function exportVault(store: VaultStore, now = new Date()): Promise<
   }
 
   return { bytes: zipBytes(entries), notes, assets, folders };
+}
+
+/* ── a note arriving from outside ───────────────────────────────────── */
+
+export type ArrivalOutcome =
+  /** Written at the path it asked for. */
+  | 'created'
+  /** That path already holds exactly this; nothing to do. */
+  | 'already'
+  /** That path holds something else, so this went in beside it. */
+  | 'alongside';
+
+export interface Arrival {
+  outcome: ArrivalOutcome;
+  /** Where it actually landed (its own path, or the one beside it). */
+  path: string;
+}
+
+/**
+ * File a note that came from somewhere else, without ever overwriting.
+ * `taken` is every path already spoken for; it is updated in place so a
+ * run of arrivals cannot collide with each other either.
+ *
+ * `create` is what does the writing, so the vault itself refuses a taken
+ * path — two tabs picking the same free name at once end with one of them
+ * being told, and picking again, rather than one silently winning.
+ */
+export async function fileIncomingNote(
+  store: VaultStore,
+  path: string,
+  content: string,
+  taken: Set<string>,
+  existing?: ReadonlyMap<string, FileRow>
+): Promise<Arrival> {
+  const there = existing ? existing.get(path) : ((await store.read(path)) ?? undefined);
+  if (there && there.kind === 'note' && (there.content ?? '') === content) {
+    return { outcome: 'already', path };
+  }
+
+  let want = taken.has(path)
+    ? uniqueNotePath(parentOf(path), stemOf(nameOf(path)), taken)
+    : path;
+  for (let attempt = 0; ; attempt++) {
+    try {
+      await store.create({ path: want, kind: 'note', content });
+      taken.add(want);
+      return { outcome: want === path ? 'created' : 'alongside', path: want };
+    } catch (err) {
+      // Somebody else took it between the look and the write.
+      if (attempt >= 3 || !/exists/.test(String(err))) throw err;
+      taken.add(want);
+      want = uniqueNotePath(parentOf(path), stemOf(nameOf(path)), taken);
+    }
+  }
+}
+
+/** Is this a file notey can read as a note? */
+export function isMarkdownFile(name: string): boolean {
+  return /\.(md|markdown|mdown|mkd)$/i.test(name);
+}
+
+export interface DroppedFile {
+  name: string;
+  text: string;
+}
+
+export interface DropReport {
+  /** The note to open — the first one that arrived. */
+  opened: string | null;
+  created: number;
+  already: number;
+  alongside: { from: string; to: string }[];
+}
+
+/**
+ * Markdown files dropped on the page, filed into `folder`. The text is
+ * written exactly as it came, so a file that already has frontmatter keeps
+ * it, and the filename becomes the title the way it does everywhere else.
+ */
+export async function dropIntoVault(
+  store: VaultStore,
+  files: readonly DroppedFile[],
+  folder: string | null,
+  taken: Iterable<string>
+): Promise<DropReport> {
+  const spoken = new Set(taken);
+  const report: DropReport = { opened: null, created: 0, already: 0, alongside: [] };
+  for (const file of files) {
+    const wanted = notePath(folder, stemOf(nameOf(normalizePath(file.name))));
+    const arrival = await fileIncomingNote(store, wanted, file.text, spoken);
+    if (arrival.outcome === 'already') report.already++;
+    else if (arrival.outcome === 'alongside') {
+      report.alongside.push({ from: wanted, to: arrival.path });
+      report.created++;
+    } else report.created++;
+    report.opened ??= arrival.path;
+  }
+  return report;
+}
+
+/** What a drop did, in one line. */
+export function describeDrop(report: DropReport): string {
+  const total = report.created + report.already;
+  if (total === 0) return 'Nothing to add.';
+  const bits: string[] = [];
+  if (report.created > 0) bits.push(`Added ${report.created} note${report.created === 1 ? '' : 's'}.`);
+  if (report.already > 0) bits.push(`${report.already} already here.`);
+  if (report.alongside.length > 0) {
+    const names = report.alongside.map((a) => stemOf(nameOf(a.to))).join(', ');
+    bits.push(`Filed alongside: ${names}.`);
+  }
+  return bits.join(' ');
 }
 
 /** A default filename for the download: `notey-2026-09-02.zip`. */
@@ -191,24 +311,13 @@ export async function importVault(
       continue;
     }
 
-    const content = decoder.decode(entry.data);
-    const there = existing.get(path);
-    if (there && there.kind === 'note' && (there.content ?? '') === content) {
+    const arrival = await fileIncomingNote(store, path, decoder.decode(entry.data), taken, existing);
+    if (arrival.outcome === 'already') {
       report.already++;
       continue;
     }
-    if (!taken.has(path)) {
-      await store.create({ path, kind: 'note', content });
-      taken.add(path);
-      report.notes++;
-      continue;
-    }
-    // Taken, and not the same note: keep both.
-    const to = uniqueNotePath(parentOf(path), stemOf(nameOf(path)), taken);
-    await store.create({ path: to, kind: 'note', content });
-    taken.add(to);
     report.notes++;
-    report.alongside.push({ from: path, to });
+    if (arrival.outcome === 'alongside') report.alongside.push({ from: path, to: arrival.path });
   }
 
   return report;

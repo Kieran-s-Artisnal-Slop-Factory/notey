@@ -29,7 +29,7 @@ npm run test:unit   # vitest run
 npm test            # playwright test (builds first)
 ```
 
-## The unit suite — 345 cases in 21 files
+## The unit suite — 363 cases in 22 files
 
 | File | Cases | Covers |
 | --- | --- | --- |
@@ -41,11 +41,12 @@ npm test            # playwright test (builds first)
 | `vault/frontmatter.test.ts` | 15 | Round-trips, key order, broken YAML left as body, junk tolerance, date strings |
 | `notebook/assets.test.ts` | 14 | Ref parsing, the 2 MB cap and its message, `uniqueAssetName` and the `.excalidraw.png` compound suffix |
 | `vault/fmFields.test.ts` | 15 | The three frontmatter field shapes: which editor a value needs, untouched round-trips, list splitting, YAML that will not parse |
-| `vault/transfer.test.ts` | 11 | **The vault out to a zip and back**: folders and images as they are on disk, an empty notebook surviving, a round trip into an empty vault, a second import changing nothing, a clash filed alongside, an image whose name is taken left alone, `..` refused, notes another tab holds skipped, a non-zip rejected before anything is written |
+| `vault/transfer.test.ts` | 19 | **Notes in and out**: the vault as folders and images on disk, an empty notebook surviving, a round trip into an empty vault, a second import changing nothing, a clash filed alongside, an image whose name is taken left alone, `..` refused, notes another tab holds skipped, a non-zip rejected before anything is written — and the same never-overwrite rule for a dropped file, including a clash within one drop |
 | `vault/model.test.ts` | 12 | Path algebra, `sanitizeTitle`, unique paths, asset refs, `toNote` round-trips, tree building |
 | `notebook/bulk.test.ts` | 12 | Flattening, subtree ids, move targets, reparenting, tag add/remove, export filenames |
 | `vault/tabs.test.ts` | 21 | **The owner/follower vault**: election, two tabs booting at once, a third tab learning the owner without waiting, failover with in-flight writes landing exactly once (the store counts its own calls), `rename` then `write` staying in order across a crash, a rename or a `create` the dead owner already did not being redone while one it did not is re-driven, a tab promoted while its own re-drive is parked finishing it, check reads lost to a second owner change being re-checked rather than hanging, silence and boot timeouts, a request with no owner at all still failing rather than waiting forever, an owner busy with other tabs not being mistaken for a dead one, one tab's open failure not sinking the next, shutdown handing on straight away, database errors coming back as errors |
 | `fuzzy.test.ts` | 10 | Subsequence matching and the scoring floor |
+| `vault/desktopPaths.test.ts` | 10 | **Where the desktop vault is**: splitting Windows and POSIX paths, drives and roots, and the rule that pointing notey at a FILE mounts the folder it sits in |
 | `vault/noteLocks.test.ts` | 9 | **One writer per note**: free at once, wait then promotion, stop waiting on moving on, promotion when the holder closes, release before the answer, reopen straight after release is held, different notes never wait on each other, no lock manager, `notesHeldElsewhere` |
 | `notebook/mermaid.test.ts` | 8 | Templates, `diagramKindOf`, completions |
 | `notebook/model.test.ts` | 8 | Note normalisation, trees, cycles, `parseTags` |
@@ -55,7 +56,7 @@ npm test            # playwright test (builds first)
 | `vault/memoryStore.test.ts` | 6 | **The `VaultStore` contract**: implicit parents, `loadAll` omitting asset bytes, `create` refusing what `write` accepts, subtree rename and clash refusal, subtree delete, meta |
 | `notebook/drawing.test.ts` | 5 | The `.excalidraw.png` convention and the vendored font list |
 
-## The browser suite — 52 cases
+## The browser suite — 58 cases
 
 The fixture gives every test a **fresh browser context** (fresh OPFS, fresh
 worker), installs `localStorage['notey-test-mode'] = '1'` with an init script
@@ -84,6 +85,7 @@ genuinely shares them.
 | editor | Alt+0 cites at the cursor and files the definition; a mermaid fence renders; maths render while `$5 and $10` stays prose; the face is remembered across a reload |
 | exports | The HTML file is self-contained (no script, no link, no external URL beyond XML namespaces, fonts embedded); Markdown carries the title as an H1; a bulk export is one zip with both files |
 | the page, in use | A click on blank paper puts the caret at the end of the writing; a breadcrumb opens the palette on that notebook |
+| dropping a file | A dropped `.md` becomes a note and opens, keeping the frontmatter it arrived with; dropping while another note is open loses nothing from it; a name already taken is filed alongside; a file dropped while in a notebook lands in that notebook; something that is not markdown is refused out loud; and the browser build offers no "Edit existing file", which only the desktop can do |
 | frontmatter | Aliases are a field a rename fills in; a field can be a value, a list or YAML; a hand-written nested map survives an unrelated edit |
 | two tabs | Two tabs booting at once settle into exactly one owner and one follower; two tabs write two different notes and both persist, and the first lists the second's note without a reload; the same note in a second tab is read-only, follows the writer's saves, and is promoted when the writer moves on; closing one tab with a write still travelling hands the database on and the write lands anyway; the survivor keeps the vault across a reload; the blank page is one page, so a second tab gets a sheet of its own that stays its own after the first tab goes, while the shared sheet is left untouched. No case assumes which tab is the owner |
 | preferences | The blank page keeps what you type without writing to the vault, and filing lands it in the Pile; "reopen the last note" works; the paper can be a legal pad and the rule can go; green bar paper prints its bands and tractor-feed holes; the grain re-scales; Settings names the backend; the paper, the desk and the pen are chosen separately; the vault exports to a real download and imports back into a **separate browser profile**, and an import over a note that differs files it alongside; the database dumps to a `.sqlite` whose first 16 bytes really are the SQLite header and which replaces a separate profile's vault, while a file that is not a database is refused without changing anything |

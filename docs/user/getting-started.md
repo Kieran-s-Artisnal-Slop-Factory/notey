@@ -68,6 +68,16 @@ a fresh sheet of its own, which lasts as long as that tab — and stays that
 tab's sheet, even after the first tab moves on, until you file it or clear
 it.
 
+## Dropping a file in
+
+Drag a `.md` file onto the page and it becomes a note and opens — from your
+desktop, an email, wherever. While you drag, the page says where it will
+land: the notebook you are in, or the Pile.
+
+Nothing is written over. A name already taken is filed alongside as `Name 2`,
+and dropping a file you already have, unchanged, just opens the one you have.
+Anything that is not a `.md` file is refused with a note saying so.
+
 ## Notebooks and the Pile
 
 - A **notebook** is a folder. Notes go in it, and folders can go in notebooks.

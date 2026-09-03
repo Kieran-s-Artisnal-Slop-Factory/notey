@@ -51,6 +51,9 @@
     onClose,
     heldPaths = new Set<string>(),
     readOnly = false,
+    desktop = false,
+    onEditExisting = undefined,
+    onChooseFolder = undefined,
   }: {
     /** A notebook path to open straight onto — what a breadcrumb passes. */
     startAt?: string | null;
@@ -76,6 +79,14 @@
     heldPaths?: ReadonlySet<string>;
     /** The open note is being written in another tab. */
     readOnly?: boolean;
+    /**
+     * Running as the desktop app, which can reach files a browser cannot.
+     */
+    desktop?: boolean;
+    /** Pick a `.md` anywhere on disk and edit it where it lies. */
+    onEditExisting?: (() => void) | undefined;
+    /** Desktop only: move the vault to another folder. */
+    onChooseFolder?: (() => Promise<string | null>) | undefined;
     onClose: () => void;
   } = $props();
 
@@ -273,6 +284,19 @@
               },
             }
       );
+    }
+    // Only the desktop build can open a file that is not already in the
+    // vault: a browser has no way to write back to where it came from.
+    if (desktop && onEditExisting) {
+      list.push({
+        id: 'cmd:edit-existing',
+        label: 'Edit existing file',
+        hint: 'any .md on this computer',
+        run: () => {
+          onEditExisting();
+          close();
+        },
+      });
     }
     list.push({
       id: 'cmd:settings',
@@ -625,7 +649,7 @@
           : 'Enter adds the tags to the ticked notes; Shift+Enter removes them.'}
       </p>
     {:else if view === 'settings'}
-      <SettingsPanel />
+      <SettingsPanel {onChooseFolder} />
     {:else}
       <ul class="results" bind:this={listEl}>
         {#each items as item (item.id)}

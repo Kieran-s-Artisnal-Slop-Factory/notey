@@ -212,6 +212,20 @@ The rules around that diagram:
 `value` as initial values only, so reading them later mounts the editor in
 the wrong face with an empty document.
 
+## Dropping a file on the page
+
+The desk is the drop target, not some small well: there is nothing to aim
+at, which is the point. `dragDepth` is a COUNTER rather than a flag, because
+`dragenter`/`dragleave` fire for every element the pointer crosses and a
+boolean flickers off the moment the cursor moves from the desk onto the
+sheet.
+
+Only a drag carrying `Files` is taken (`dataTransfer.types`), so Crepe's own
+block dragging is untouched. Markdown files become notes through
+`dropIntoVault`, which shares `fileIncomingNote` with the zip import — one
+never-overwrite rule for both doors. Anything else is named in the flash
+rather than silently dropped: a PNG that vanishes looks like a bug.
+
 ## Known limits and decisions
 
 - **The editor is keyed on the open document, not the note path.** A rename

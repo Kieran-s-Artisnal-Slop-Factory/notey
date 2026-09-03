@@ -1,7 +1,13 @@
 /**
- * The desktop vault: real files under `Documents/Notey`, via Tauri's fs
+ * The desktop vault: real files in a folder you choose, via Tauri's fs
  * plugin. Notes are plain `.md` files anyone can open in any editor;
  * assets are real binaries in `.assets/` folders; the vault IS the disk.
+ *
+ * The folder is passed in rather than fixed, because on the desktop it is
+ * a question with three answers — a launch argument, the folder you chose,
+ * or `Documents/Notey` — and desktop.ts is what answers it. That is also
+ * what lets `notey ~/notes/plan.md` write back to `~/notes`: the vault is
+ * simply mounted there for the session.
  *
  * Same semantics as memoryStore.test.ts specifies: implicit parents,
  * subtree rename/remove, clash refusal. Files that are not notes, dirs or
@@ -14,12 +20,12 @@
  */
 import type { FileRow, FileWrite, VaultStore } from './types';
 import { decodeBytes, encodeBytes } from '../encode/base64';
+import { underRoot } from './desktopPaths';
 
 export function isTauri(): boolean {
   return typeof window !== 'undefined' && '__TAURI_INTERNALS__' in window;
 }
 
-const VAULT_DIR = 'Notey';
 const META_FILE = '.notey.json';
 
 const MIME_BY_EXT: Record<string, string> = {
@@ -39,12 +45,12 @@ function mimeOf(path: string): string {
 
 type FsModule = typeof import('@tauri-apps/plugin-fs');
 
-export function tauriStore(): VaultStore {
+export function tauriStore(root: string): VaultStore {
   let fs: FsModule | null = null;
-  let baseDir: number = 0;
 
-  const abs = (path: string): string => (path === '' ? VAULT_DIR : `${VAULT_DIR}/${path}`);
-  const opts = () => ({ baseDir });
+  /** A vault path as a real one. Absolute, so no `baseDir` is involved. */
+  const abs = (path: string): string => underRoot(root, path);
+  const opts = () => ({});
 
   const needFs = (): FsModule => {
     if (!fs) throw new Error('vault not initialized');
@@ -100,13 +106,14 @@ export function tauriStore(): VaultStore {
   };
 
   const store: VaultStore = {
-    backend: 'files (Documents/Notey)',
+    backend: `files (${root})`,
 
     async init() {
       fs = await import('@tauri-apps/plugin-fs');
-      baseDir = fs.BaseDirectory.Document;
-      if (!(await fs.exists(VAULT_DIR, opts()))) {
-        await fs.mkdir(VAULT_DIR, { ...opts(), recursive: true });
+      // The folder may not exist yet — a freshly chosen one, or the
+      // default on a first run.
+      if (!(await fs.exists(abs('')))) {
+        await fs.mkdir(abs(''), { recursive: true });
       }
     },
 
@@ -195,7 +202,7 @@ export function tauriStore(): VaultStore {
       if (parent && !(await f.exists(abs(parent), opts()))) {
         await f.mkdir(abs(parent), { ...opts(), recursive: true });
       }
-      await f.rename(abs(from), abs(to), { oldPathBaseDir: baseDir, newPathBaseDir: baseDir });
+      await f.rename(abs(from), abs(to));
     },
 
     async remove(path) {

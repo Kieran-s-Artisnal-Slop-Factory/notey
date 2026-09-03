@@ -106,8 +106,8 @@ This card tells you which storage notey actually got:
   after every change. It works, and it is slower with a large vault.
 - **sqlite (memory only — nothing persists!)** — neither was available, which
   usually means a private window. Nothing will survive the tab.
-- **files (Documents/Notey)** — you are in the desktop app; your notes are
-  real files.
+- **files (…)** — you are in the desktop app, and the path in the brackets
+  is the folder your notes are really in.
 
 If notey is open in more than one tab, one of them holds the database and
 the others go through it, and the card says so: **sqlite (OPFS) — via

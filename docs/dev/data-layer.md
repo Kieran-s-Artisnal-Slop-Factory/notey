@@ -17,10 +17,12 @@ _Describes the code as of v0.1.0 (unreleased; schema v1) — verify against sour
 | [src/lib/vault/model.ts](../../src/lib/vault/model.ts) | Path algebra and the `FileRow` to `Note` conversion |
 | [src/lib/vault/frontmatter.ts](../../src/lib/vault/frontmatter.ts) | YAML frontmatter: tolerant in, lossless out |
 | [src/lib/vault/fmFields.ts](../../src/lib/vault/fmFields.ts) | The three field shapes the header edits: text, list, YAML |
-| [src/lib/vault/transfer.ts](../../src/lib/vault/transfer.ts) | The whole vault out to a zip and back — see [export.md](export.md) |
+| [src/lib/vault/transfer.ts](../../src/lib/vault/transfer.ts) | Notes in and out: the zip, and a dropped file — see [export.md](export.md) |
+| [src/lib/vault/desktop.ts](../../src/lib/vault/desktop.ts) | Which folder the desktop vault is in — see [tauri.md](tauri.md) |
+| [src/lib/vault/desktopPaths.ts](../../src/lib/vault/desktopPaths.ts) | The path arithmetic behind it |
 | [src/lib/vault/sqlite-worker.ts](../../src/lib/vault/sqlite-worker.ts) | All SQL, the schema, the persistence tiers |
 | [src/lib/vault/sqliteStore.ts](../../src/lib/vault/sqliteStore.ts) | Main-thread RPC proxy to that worker |
-| [src/lib/vault/tauriStore.ts](../../src/lib/vault/tauriStore.ts) | Real `.md` files under `Documents/Notey` |
+| [src/lib/vault/tauriStore.ts](../../src/lib/vault/tauriStore.ts) | Real `.md` files in the folder the desktop is pointed at |
 | [src/lib/vault/memoryStore.ts](../../src/lib/vault/memoryStore.ts) | In-memory store — and the contract's spec |
 | [src/lib/vault/store.ts](../../src/lib/vault/store.ts) | The backend picker, one store per page; `onVaultChange` |
 | [src/lib/vault/tabs.ts](../../src/lib/vault/tabs.ts) | Many tabs, one database: the owner/follower vault over a Web Lock and a BroadcastChannel |

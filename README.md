@@ -25,6 +25,10 @@ desktop program that writes plain `.md` files to a folder you own.
   point at the old name.
 - **Search** over titles, aliases, tags, paths and bodies, with `tag:` and
   `book:` filters and a snippet of the matching line.
+- **Drop a `.md` file on the page** and it becomes a note, without
+  overwriting anything that shares its name. On the desktop, `notey plan.md`
+  opens that file and saves back to it — it is a Markdown editor as well as
+  a vault.
 - **Exports**: Markdown with images inlined, one self-contained HTML file,
   print to PDF, a zip of many notes at once, and a zip of the whole vault —
   folders, files and images — that imports straight back in.
@@ -54,7 +58,7 @@ real directory with the same code above the seam. Preferences are per device
 in `localStorage` and never in the vault.
 
 The desktop build writes the same tree as real files under
-`Documents/Notey`.
+a folder you choose (it offers `Documents/Notey` on a first run).
 
 ## Quickstart
 

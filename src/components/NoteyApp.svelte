@@ -50,7 +50,11 @@
     uniqueNotePath,
   } from '../lib/vault/model';
   import { noteAssetStore, type NoteAssetStore } from '../lib/vault/assetStore';
-  import { onVaultChange, openVaultStore } from '../lib/vault/store';
+  import { describeDrop, dropIntoVault, isMarkdownFile } from '../lib/vault/transfer';
+  import { rootLabel } from '../lib/vault/desktopPaths';
+  import { onVaultChange, openVaultStore, remountVault } from '../lib/vault/store';
+  import { isTauri } from '../lib/vault/tauriStore';
+  import DesktopWelcome from './DesktopWelcome.svelte';
   import type { Change } from '../lib/vault/tabs';
   import {
     holdLock,
@@ -168,6 +172,22 @@
    * land in someone else's vault.
    */
   let vaultReplaced = $state(false);
+  /**
+   * A file is being dragged over the page. Counted rather than set,
+   * because dragenter/dragleave fire for every element the pointer
+   * crosses — a plain boolean flickers off the moment the cursor moves
+   * from the desk onto the sheet.
+   */
+  let dragDepth = $state(0);
+  const dragging = $derived(dragDepth > 0);
+
+  /* ── the desktop's folder ──────────────────────────────────────────── */
+  /** True in the Tauri build, which has a real folder and real files. */
+  const desktop = isTauri();
+  /** The folder the vault is mounted on; shown by the welcome. */
+  let vaultFolder = $state('');
+  /** Shown once, until a folder has been chosen deliberately. */
+  let welcomeOpen = $state(false);
   /** Saves run one after another, never overlapping. */
   let saveChain: Promise<void> = Promise.resolve();
   /** Writes still landing for a page whose lock is about to be let go. */
@@ -590,6 +610,19 @@
           if (found) await openNote(found);
           else missingLink = wanted;
           return;
+        }
+        if (desktop) {
+          const { isFirstRun, resolveDesktopVault, takePendingOpen } = await import(
+            '../lib/vault/desktop'
+          );
+          vaultFolder = (await resolveDesktopVault()).root;
+          // Say where the files are going before writing any.
+          welcomeOpen = isFirstRun();
+          const launch = takePendingOpen();
+          if (launch) {
+            await openLaunchFile(launch);
+            return;
+          }
         }
         if (bootPrefs.startup === 'blank') return; // already on the blank page
         const remembered = bootPrefs.lastNote
@@ -1630,6 +1663,150 @@
     editor?.focusEnd();
   }
 
+  /* ── the desktop: which folder, and which file ─────────────────────── */
+
+  /**
+   * Mount another folder and open a note in it. This is what makes notey
+   * an editor rather than only a vault: the file's own folder becomes the
+   * vault, so every ordinary save writes back where the file came from.
+   */
+  async function mountAt(root: string, open: string | null): Promise<void> {
+    await flushSave();
+    // The page being left belongs to the old vault.
+    const previous = hold;
+    hold = null;
+    currentPath = null;
+    if (previous) void retireHold(previous);
+    store = await remountVault(root);
+    vaultFolder = root;
+    await refreshFromRows();
+    if (open) await openLaunchFile(open);
+    else openScratch({ silent: true });
+    flash(`Editing in ${rootLabel(root)}.`);
+  }
+
+  /**
+   * Open a note the desktop was pointed at. `notey todo.md` for a file
+   * that is not there yet starts it, which is what an editor does.
+   */
+  async function openLaunchFile(path: string): Promise<void> {
+    if (!store) return;
+    let note = notes.find((n) => n.id === path);
+    if (!note) {
+      const now = new Date().toISOString();
+      await store.create({
+        path,
+        kind: 'note',
+        content: noteContentOf({
+          id: path,
+          title: stemOf(nameOf(path)),
+          body_md: '',
+          aliases: [],
+          tags: [],
+          parent_id: parentOf(path),
+          fm: {},
+          created_at: now,
+          updated_at: now,
+        }),
+      });
+      await refreshFromRows();
+      note = notes.find((n) => n.id === path);
+    }
+    if (note) await openNote(note, { remember: false });
+  }
+
+  /** Ctrl+K → Edit existing file: pick a `.md` anywhere and edit it there. */
+  async function editExistingFile(): Promise<void> {
+    try {
+      const { chooseVaultFile } = await import('../lib/vault/desktop');
+      const target = await chooseVaultFile();
+      if (!target) return;
+      await mountAt(target.root, target.open);
+    } catch (err) {
+      flash('Could not open that file: ' + String(err));
+    }
+  }
+
+  /** The welcome's "choose another folder" — and Settings' button. */
+  async function chooseFolder(): Promise<string | null> {
+    const { chooseVaultFolder } = await import('../lib/vault/desktop');
+    const root = await chooseVaultFolder();
+    if (root) await mountAt(root, null);
+    return root;
+  }
+
+  /* ── dropping a markdown file on the page ──────────────────────────── */
+
+  /** Only a drag carrying FILES is ours; dragging text or a block is not. */
+  function isFileDrag(event: DragEvent): boolean {
+    return event.dataTransfer?.types.includes('Files') ?? false;
+  }
+
+  function onDragEnter(event: DragEvent): void {
+    if (!isFileDrag(event)) return;
+    event.preventDefault();
+    dragDepth++;
+  }
+
+  function onDragOver(event: DragEvent): void {
+    if (!isFileDrag(event)) return;
+    // Without this the browser navigates to the file instead.
+    event.preventDefault();
+    if (event.dataTransfer) event.dataTransfer.dropEffect = 'copy';
+  }
+
+  function onDragLeave(event: DragEvent): void {
+    if (!isFileDrag(event)) return;
+    dragDepth = Math.max(0, dragDepth - 1);
+  }
+
+  /** Where a dropped file lands: the notebook you are in, or the Pile. */
+  const dropFolder = $derived(scratchOpen ? null : parentId);
+
+  function onDrop(event: DragEvent): void {
+    if (!isFileDrag(event)) return;
+    event.preventDefault();
+    dragDepth = 0;
+    const dropped = [...(event.dataTransfer?.files ?? [])];
+    if (dropped.length === 0) return;
+    void addDroppedFiles(dropped);
+  }
+
+  /**
+   * Markdown files become notes and the first one opens. Anything else is
+   * named rather than silently ignored — a dropped PNG that vanishes looks
+   * like a bug.
+   */
+  async function addDroppedFiles(dropped: readonly File[]): Promise<void> {
+    if (!store) return;
+    const md = dropped.filter((file) => isMarkdownFile(file.name));
+    const other = dropped.length - md.length;
+    if (md.length === 0) {
+      flash(
+        other === 1
+          ? 'That is not a markdown file — notey opens .md files.'
+          : 'Those are not markdown files — notey opens .md files.'
+      );
+      return;
+    }
+    const folder = dropFolder;
+    try {
+      // Whatever is being written here goes in first, so a drop that opens
+      // another note cannot strand it.
+      await flushSave();
+      const files = await Promise.all(
+        md.map(async (file) => ({ name: file.name, text: await file.text() }))
+      );
+      const report = await dropIntoVault(store, files, folder, allPaths());
+      await refreshFromRows();
+      const opened = report.opened ? notes.find((n) => n.id === report.opened) : undefined;
+      if (opened) await openNote(opened);
+      flash(describeDrop(report) + (other > 0 ? ` ${other} not markdown, left out.` : ''));
+    } catch (err) {
+      flash('Could not add that file: ' + String(err));
+    }
+  }
+
   /** Grow a YAML field with what it holds, up to a sensible ceiling. */
   function yamlRows(value: string): number {
     return Math.min(8, value.split(String.fromCharCode(10)).length + 1);
@@ -1662,7 +1839,24 @@
     <p>{bootError}</p>
   </div>
 {:else}
-  <div class="desk">
+  <!-- svelte-ignore a11y_no_static_element_interactions -->
+  <div
+    class="desk"
+    class:dropping={dragging}
+    ondragenter={onDragEnter}
+    ondragover={onDragOver}
+    ondragleave={onDragLeave}
+    ondrop={onDrop}
+  >
+    {#if dragging}
+      <!-- Named, so it is obvious WHERE the file will land before letting go. -->
+      <div class="drop-hint" data-testid="notey-drop-hint" aria-hidden="true">
+        <p>Drop a .md file to open it as a note</p>
+        <p class="drop-where">
+          {dropFolder ? `into ${dropFolder}` : 'into the Pile'}
+        </p>
+      </div>
+    {/if}
     <!-- The one piece of chrome: a book. Closed on the page, open while
          the library is showing. -->
     <button
@@ -1965,6 +2159,23 @@
     </article>
   </div>
 
+  {#if welcomeOpen}
+    <DesktopWelcome
+      folder={vaultFolder}
+      onKeep={() => {
+        // Keeping the offered folder is still a choice: remembering it is
+        // what stops this asking again.
+        void import('../lib/vault/desktop').then(({ useFolder }) => useFolder(vaultFolder));
+        welcomeOpen = false;
+      }}
+      onChoose={async () => {
+        const root = await chooseFolder();
+        if (root) welcomeOpen = false;
+        return root;
+      }}
+    />
+  {/if}
+
   {#if paletteOpen}
     <CommandPalette
       startAt={paletteAt}
@@ -1984,6 +2195,9 @@
       onBulk={runBulk}
       {heldPaths}
       readOnly={lockedElsewhere}
+      {desktop}
+      onEditExisting={desktop ? () => void editExistingFile() : undefined}
+      onChooseFolder={desktop ? chooseFolder : undefined}
       onClose={() => {
         paletteOpen = false;
         paletteAt = null;
@@ -2013,6 +2227,46 @@
     align-items: center;
     gap: var(--space-3);
     min-height: calc(100dvh - var(--navbar-height));
+  }
+
+  /*
+   * A drag in progress. The whole desk is the target — there is nothing to
+   * aim at, which is the point — and the sheet dims so the hint reads.
+   */
+  .desk.dropping::after {
+    content: '';
+    position: fixed;
+    inset: 0;
+    background: var(--scrim-color);
+    pointer-events: none;
+    z-index: 80;
+  }
+
+  .drop-hint {
+    position: fixed;
+    inset: var(--space-5);
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+    gap: var(--space-2);
+    border: 2px dashed var(--color-primary);
+    border-radius: var(--radius-md);
+    background: var(--surface-color);
+    color: var(--text-color);
+    box-shadow: var(--shadow-2);
+    pointer-events: none;
+    z-index: 81;
+  }
+
+  .drop-hint p {
+    margin: 0;
+    font-size: var(--font-size-lg);
+  }
+
+  .drop-where {
+    color: var(--text-muted-color);
+    font-size: var(--font-size-sm);
   }
 
   /* ── the book ──────────────────────────────────────────────────────── */

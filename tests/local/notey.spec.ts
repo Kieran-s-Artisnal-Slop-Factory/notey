@@ -342,6 +342,110 @@ test.describe('frontmatter', () => {
  * (src/lib/vault/tabs.ts); which one is which depends on who opened
  * first, and no test below assumes it.
  */
+test.describe('dropping a file', () => {
+  /**
+   * A real drag: build a DataTransfer in the page, put File objects on it,
+   * and dispatch the events the browser would. `setInputFiles` cannot be
+   * used here — there is no input; the drop target is the page itself.
+   */
+  async function dropFiles(page: Page, files: { name: string; text: string }[]): Promise<void> {
+    await page.evaluate((dropped) => {
+      const data = new DataTransfer();
+      for (const file of dropped) {
+        data.items.add(new File([file.text], file.name, { type: 'text/markdown' }));
+      }
+      const desk = document.querySelector('.desk')!;
+      for (const type of ['dragenter', 'dragover', 'drop'] as const) {
+        desk.dispatchEvent(
+          new DragEvent(type, { dataTransfer: data, bubbles: true, cancelable: true })
+        );
+      }
+    }, files);
+  }
+
+  test('a dropped .md file becomes a note and opens', async ({ app }) => {
+    await openApp(app);
+    await dropFiles(app.page, [
+      { name: 'From my disk.md', text: '---\ntags:\n  - kept\n---\n\nWritten elsewhere.' },
+    ]);
+    await expect(app.page.getByTestId('notebook-title')).toHaveValue('From my disk', {
+      timeout: 15_000,
+    });
+    await expect(app.page.locator('[data-testid="notebook-canvas"]')).toContainText(
+      'Written elsewhere.'
+    );
+    // The file is in the vault, with the frontmatter it arrived with.
+    await expect
+      .poll(async () => (await app.read('From my disk.md'))?.content ?? '', { timeout: 10_000 })
+      .toContain('- kept');
+    // And it is a real note: the header shows the tag it came with.
+    await expect(app.page.getByTestId('notebook-tags')).toHaveValue('kept');
+  });
+
+  test('dropping while another note is open keeps that note and opens the new one', async ({ app }) => {
+    await openApp(app);
+    await newNote(app.page);
+    await setTitle(app.page, 'Being written');
+    await typeInCanvas(app.page, 'Half a thought');
+    await expect(app.page.getByTestId('notebook-save-state')).toContainText('Saved', {
+      timeout: 10_000,
+    });
+
+    await dropFiles(app.page, [{ name: 'Interruption.md', text: 'A different note.' }]);
+    await expect(app.page.getByTestId('notebook-title')).toHaveValue('Interruption', {
+      timeout: 15_000,
+    });
+    // Nothing was lost from the note that was open.
+    await expect
+      .poll(async () => (await app.read('Being written.md'))?.content ?? '', { timeout: 10_000 })
+      .toContain('Half a thought');
+  });
+
+  test('a dropped name that clashes is filed alongside, never over the top', async ({ app }) => {
+    await openApp(app);
+    await app.write({ path: 'Plan.md', kind: 'note', content: 'The one I already had.' });
+    await openApp(app);
+
+    await dropFiles(app.page, [{ name: 'Plan.md', text: 'The one from my disk.' }]);
+    await expect(app.page.getByTestId('notebook-title')).toHaveValue('Plan 2', { timeout: 15_000 });
+    expect((await app.read('Plan.md'))?.content).toBe('The one I already had.');
+    expect((await app.read('Plan 2.md'))?.content).toBe('The one from my disk.');
+  });
+
+  test('a file dropped into a notebook lands in that notebook', async ({ app }) => {
+    await openApp(app);
+    await app.write({ path: 'Work/Anchor.md', kind: 'note', content: 'anchor' });
+    await openApp(app);
+    await openNoteByLink(app, 'Anchor');
+
+    await dropFiles(app.page, [{ name: 'Filed here.md', text: 'inside Work' }]);
+    await expect(app.page.getByTestId('notebook-title')).toHaveValue('Filed here', {
+      timeout: 15_000,
+    });
+    await expect
+      .poll(async () => (await app.read('Work/Filed here.md'))?.content ?? '', { timeout: 10_000 })
+      .toBe('inside Work');
+  });
+
+  test('the web build offers no way to edit a file on disk', async ({ app }) => {
+    await openApp(app);
+    await openPalette(app.page);
+    // A browser cannot write back to where a file came from, so the
+    // desktop-only command must not be offered here.
+    await expect(item(app.page, 'Edit existing file')).toHaveCount(0);
+    await expect(item(app.page, 'New note')).toBeVisible();
+  });
+
+  test('a file that is not markdown is refused, and says so', async ({ app }) => {
+    await openApp(app);
+    await dropFiles(app.page, [{ name: 'photo.png', text: 'not really a png' }]);
+    await expect(app.page.getByTestId('notebook-feedback')).toContainText('.md files', {
+      timeout: 10_000,
+    });
+    expect((await app.loadAll()).filter((r) => r.kind === 'note')).toEqual([]);
+  });
+});
+
 test.describe('two tabs', () => {
   const saved = (page: Page) =>
     expect(page.getByTestId('notebook-save-state')).toContainText('Saved', { timeout: 15_000 });

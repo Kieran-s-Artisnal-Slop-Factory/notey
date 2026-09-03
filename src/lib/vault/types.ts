@@ -6,7 +6,7 @@
  * root-level `.md` file sits in the PILE, and a note's pasted images live
  * beside it in `<its folder>/.assets/`. The browser build mirrors this tree
  * into one sqlite-wasm database (a pseudo-filesystem); the Tauri build IS a
- * real filesystem under `Documents/Notey`. Everything above the storage
+ * real filesystem, in a folder you choose. Everything above the storage
  * seam (`VaultStore`) is shared.
  *
  * Invariants:

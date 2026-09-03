@@ -79,6 +79,21 @@
   (it asks first) and every open tab reloads — it is for seeing someone
   else's notes as they see them, where the zip is for merging.
 
+* **Drag a `.md` file onto the page and it becomes a note.** From your
+  desktop, an email, anywhere; it opens straight away, and while you drag,
+  the page says where it will land — the notebook you are in, or the Pile.
+  A name already taken is filed alongside rather than written over, and a
+  file you already have, unchanged, just opens the one you have.
+* **The desktop app asks where to keep your notes, and can be pointed
+  anywhere.** A first launch says plainly where the files are about to go
+  and offers a folder picker; Settings can move it later. `notey plan.md`
+  opens that file **and saves back to it**, `notey ~/projects` works in that
+  folder, and `notey new.md` starts a file that is not there yet — because
+  pointing notey at a file simply mounts the folder it sits in, so links,
+  images and search work there with no separate "external file" mode.
+  `Ctrl+K → Edit existing file` does the same with a picker, and appears
+  only on the desktop, where writing back to a real file is possible.
+
 ## Bug Fixes
 
 Found while building 0.1.0. The first three are in code ported from
