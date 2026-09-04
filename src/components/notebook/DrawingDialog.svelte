@@ -16,10 +16,18 @@
    *    how you finish a multi-point line, drop a selection, or leave the
    *    current tool. Closing on it would take the key away from the canvas
    *    and throw the drawing out at the same time. The × and Cancel close.
-   *  - **Focus moves INTO the canvas on open.** Excalidraw's tool shortcuts
-   *    are single letters and digits (`5` is the arrow), and it listens on
-   *    the document, so if focus were left in the note behind, pressing `5`
-   *    would pick the arrow tool AND type "5" into the note.
+   *  - **The keyboard is Excalidraw's for as long as this is open.** Its
+   *    shortcuts are single letters and digits (`5` is the arrow, `l` the
+   *    line), and by default it listens on its OWN container, not the
+   *    document — so a key only reaches it while focus is inside its React
+   *    root. Focus was never put there: it stayed in the note behind (so
+   *    `5` typed into the note), and after the first fix it sat on this
+   *    dialog's own div, where Escape to finish a line went nowhere.
+   *    `handleKeyboardGlobally` binds Excalidraw to the document instead,
+   *    which is right for a modal — nothing else should be listening —
+   *    and `autoFocus` puts the caret in the canvas on mount for the keys
+   *    that care where focus is. The note behind is blurred first, before
+   *    the lazy chunk is even awaited, so no keystroke lands in it.
    */
   import { onDestroy, onMount } from 'svelte';
   import {
@@ -29,6 +37,15 @@
     type ExcalidrawModule,
   } from '../../lib/notebook/drawing';
   import { isDarkScheme } from '../../lib/notebook/mermaid';
+
+  /** The same gate the test hook uses (src/lib/testMode.ts). */
+  function testMode(): boolean {
+    try {
+      return localStorage.getItem('notey-test-mode') === '1';
+    } catch {
+      return false;
+    }
+  }
 
   let {
     /** Existing drawing to reopen; null for a blank canvas. */
@@ -63,8 +80,6 @@
     getSceneElements: () => readonly unknown[];
     getAppState: () => Record<string, unknown>;
     getFiles: () => unknown;
-    /** Excalidraw's own "put the keyboard here", when the build has it. */
-    focusContainer?: () => void;
   } | null = null;
 
   let loading = $state(true);
@@ -74,6 +89,7 @@
   onMount(async () => {
     // Before anything is awaited: the note behind must stop being the
     // thing the keyboard talks to, or the first keystroke lands in it.
+    // Focus goes to the dialog for now; Excalidraw takes it on mount.
     cameFrom = document.activeElement as HTMLElement | null;
     cameFrom?.blur?.();
     modal?.focus();
@@ -110,9 +126,15 @@
             : null,
           excalidrawAPI: (handle: typeof api) => {
             api = handle;
-            // Now that the canvas exists, let it hold the keyboard.
-            handle?.focusContainer?.();
+            // For the browser suite only: the live scene, so a test can see
+            // a line being drawn and see Escape finish it.
+            if (testMode()) (window as unknown as { __noteyDrawing?: unknown }).__noteyDrawing = handle;
           },
+          // A modal owns the keyboard: bind to the document, not the
+          // container, so a key counts wherever focus happens to sit.
+          handleKeyboardGlobally: true,
+          // And put focus in the canvas anyway, for what does care.
+          autoFocus: true,
           // Saving and loading are the notebook's business.
           UIOptions: {
             canvasActions: { loadScene: false, saveToActiveFile: false, export: false },
@@ -130,6 +152,7 @@
     // React must tear its own tree down before Svelte removes the host.
     root?.unmount();
     root = null;
+    delete (window as unknown as { __noteyDrawing?: unknown }).__noteyDrawing;
     // Hand the keyboard back to whatever had it, if it is still there.
     if (cameFrom && document.contains(cameFrom)) cameFrom.focus?.();
   });

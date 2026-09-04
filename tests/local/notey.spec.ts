@@ -860,13 +860,35 @@ test.describe('editor', () => {
       );
     expect(await inNote()).toBe(false);
 
+    // The keys must reach EXCALIDRAW, not merely miss the note. It binds
+    // its shortcuts to its own container unless told otherwise, so a key
+    // pressed with focus anywhere else used to vanish. `window.__noteyDrawing`
+    // is its live API, exposed in test mode.
+    await app.page.waitForFunction(() => (window as any).__noteyDrawing !== undefined, undefined, {
+      timeout: 30_000,
+    });
+    const tool = () =>
+      app.page.evaluate(() => (window as any).__noteyDrawing.getAppState().activeTool.type as string);
+    const lineInProgress = () =>
+      app.page.evaluate(() => (window as any).__noteyDrawing.getAppState().multiElement !== null);
+
     await app.page.keyboard.press('5'); // the arrow tool
-    await app.page.keyboard.press('r'); // the rectangle tool
+    expect(await tool()).toBe('arrow');
+    await app.page.keyboard.press('l'); // the line tool
+    expect(await tool()).toBe('line');
     expect(await inNote()).toBe(false);
 
-    // Escape is the canvas's (finishing a line, dropping a selection), so
-    // the dialog must still be open after it.
+    // Draw a line point by point, the way that needs Escape to finish.
+    const canvas = (await app.page.getByTestId('notebook-drawing-canvas').boundingBox())!;
+    const at = (fx: number, fy: number) => [canvas.x + canvas.width * fx, canvas.y + canvas.height * fy] as const;
+    await app.page.mouse.click(...at(0.3, 0.5));
+    await app.page.mouse.click(...at(0.5, 0.4));
+    await app.page.mouse.click(...at(0.7, 0.6));
+    expect(await lineInProgress()).toBe(true);
+
+    // Escape is the canvas's: it finishes the line, and the dialog stays.
     await app.page.keyboard.press('Escape');
+    await expect.poll(lineInProgress).toBe(false);
     await expect(dialog).toBeVisible();
 
     // Nothing leaked into the note.

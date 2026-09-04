@@ -147,9 +147,11 @@ Found while building 0.1.0. The first three are in code ported from
 * **The drawing canvas no longer types into the note behind it.** Opening a
   drawing from the ✏ on an existing image left the caret in the note, so
   Excalidraw's tool shortcuts — `5` for the arrow, `r` for the rectangle —
-  picked the tool *and* typed the character into what you were writing.
-  Focus now moves into the canvas as the dialog opens, and back to where it
-  was when it closes.
+  picked the tool *and* typed the character into what you were writing —
+  and Excalidraw itself only listens while focus is inside its own box, so
+  with the note blurred, Escape to finish a line went nowhere either. The
+  canvas now owns the keyboard for as long as the dialog is open, and focus
+  goes back to where it was when it closes.
 * **Escape belongs to the drawing canvas.** It used to close the dialog,
   which took the key away from Excalidraw — where Escape finishes a
   multi-point line, drops a selection, or leaves a tool — and threw the

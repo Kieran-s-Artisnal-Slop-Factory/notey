@@ -144,14 +144,21 @@ differently on purpose
   multi-point line, drops a selection, leaves the current tool. A dialog
   that closes on Escape takes the key away from the canvas *and* discards
   the drawing at the same time. Cancel and × close it.
-- **Focus moves into the canvas on open**, via Excalidraw's own
-  `focusContainer()`, with the previously focused element blurred before
-  the lazy chunk is even awaited. Its tool shortcuts are bare digits and
-  letters and it listens on the document, so a caret left in the note
-  behind means `5` picks the arrow tool AND types "5" into what you were
-  writing. Focus goes back where it came from when the dialog closes.
-  The ✏ affordance on an existing drawing is the path that made this
-  obvious: it is a click INSIDE the text, so the caret never left.
+- **The keyboard is Excalidraw's while it is open.** By default Excalidraw
+  binds its shortcuts to its own container, not the document
+  (`handleKeyboardGlobally` is off), so a key only reaches it while focus
+  is inside its React root — and nothing had put it there. The caret
+  stayed in the note behind, so `5` typed "5" into what you were writing;
+  once the note was blurred, focus sat on the dialog's own div and Escape
+  to finish a line went nowhere at all. The dialog now passes
+  `handleKeyboardGlobally: true` (right for a modal: nothing else should be
+  listening) and `autoFocus: true`, and blurs the note before the lazy
+  chunk is even awaited. Focus goes back where it came from on close. The
+  ✏ affordance on an existing drawing is the path that made the first
+  half obvious: it is a click INSIDE the text, so the caret never left.
+  In test mode the live Excalidraw API is exposed as
+  `window.__noteyDrawing`, which is how the suite watches a line being
+  drawn and sees Escape finish it.
 
 ## Known limits and decisions
 
