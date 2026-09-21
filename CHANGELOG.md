@@ -38,8 +38,8 @@
 * The full **useful notebook editor**, ported: WYSIWYG / Source / Preview
   faces over one markdown string, `[[wiki links]]` with backlinks and rename
   aliases, footnotes (Alt+0, dialog, gutter markers), mermaid diagrams with a
-  template workbench, Excalidraw drawings saved as re-editable PNGs, pasted
-  images, and KaTeX maths.
+  template workbench, Excalidraw drawings saved as re-editable PNGs, and
+  pasted images.
 * **Tags, fulltext search and filtering** — frontmatter tags editable in the
   page header, and a Ctrl+K search covering titles, aliases, tags, paths and
   bodies, with `tag:` and `book:` filters and a snippet of the matching line.
@@ -93,6 +93,23 @@
   images and search work there with no separate "external file" mode.
   `Ctrl+K → Edit existing file` does the same with a picker, and appears
   only on the desktop, where writing back to a real file is possible.
+* **A formula editor.** **∑ Formula** opens a MathLive mathfield: write
+  maths as it looks rather than as LaTeX — `pi` becomes π, `/` a fraction,
+  `sum` a Σ with its limits — with a shelf of the usual shapes, MathLive's
+  own maths keyboard, and a LaTeX box beside it that edits the same formula
+  for anyone who knows the codes. Double-click a formula in the note to edit
+  it; in Source, the button opens on the formula under the cursor. Formulas
+  are saved as ordinary `$…$` and `$$…$$` markdown. One engine now does all
+  the maths — the editor, the page, Preview and the HTML export — where
+  KaTeX used to draw formulas you could only write as code.
+* **The whole app is downloaded on the first visit.** The build writes the
+  list of every file it made, and the service worker fetches all of it
+  straight away — every lazily loaded feature, the database engine, every
+  font — rather than guessing at the list by crawling the pages at a
+  deliberate crawl. After one visit, anything works without a network,
+  including what you have never opened. Settings says when it is done and
+  can finish the job on demand; after an update only what changed is
+  fetched, and what the new build no longer uses is cleared out.
 
 ## Bug Fixes
 
@@ -156,6 +173,14 @@ Found while building 0.1.0. The first three are in code ported from
   which took the key away from Excalidraw — where Escape finishes a
   multi-point line, drops a selection, or leaves a tool — and threw the
   drawing away in the process. The dialog closes with Cancel or ×.
+* **A `$` typed in the rich view is saved as a `$`.** With maths switched
+  on, the markdown writer escaped every dollar in prose, so `costs $7`
+  was saved as `costs \$7` — invisible in the rendered note, and a file
+  that changed every time it went through the editor. Dollars in code are
+  left exactly as written.
+* **Prices are prose in the rich view too.** "$5 and $10" was drawn as a
+  formula reading "5 and" in the rich view while Preview, correctly, left it
+  alone; the two now follow the same rule.
 
 ## Other
 

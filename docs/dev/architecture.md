@@ -31,7 +31,9 @@ _Describes the code as of v0.1.0 (unreleased; schema v1) — verify against sour
 Astro 7 (static output, no adapter) · Svelte 5 with runes · TypeScript strict ·
 sqlite-wasm in a worker for the browser vault · Tauri 2 for the desktop
 build · Milkdown Crepe + CodeMirror 6 for the editor · marked + DOMPurify +
-Prism for rendering · KaTeX, mermaid and Excalidraw, all lazily.
+Prism for rendering · MathLive, mermaid and Excalidraw, all lazily — and
+all downloaded on the first visit anyway, by a service worker working from
+the build's own file list.
 
 ## Runtime
 

@@ -25,7 +25,6 @@
  * `drawing-fonts` offline bundle fetches them all up front.
  */
 import { href } from '../paths';
-import { FONT_CACHE } from '../math/fonts';
 
 /** The bits of the Excalidraw module we use, kept loose to avoid its types. */
 export interface ExcalidrawModule {
@@ -188,7 +187,7 @@ export const DRAWING_FONT_FILES: readonly string[] = [
   'Virgil/Virgil-Regular.woff2',
 ];
 
-/** The same, as app URLs — what the offline bundle fetches into `FONT_CACHE`. */
+/** The same, as app URLs — what the service worker precaches by name. */
 export const DRAWING_ASSETS: readonly string[] = DRAWING_FONT_FILES.map((name) =>
   href(`/excalidraw/fonts/${name}`)
 );
@@ -196,19 +195,6 @@ export const DRAWING_ASSETS: readonly string[] = DRAWING_FONT_FILES.map((name) =
 /**
  * Total bytes, from `public/excalidraw/PROVENANCE.txt`. A unit test reads
  * that file and checks this number, so a re-vendor that changes sizes fails
- * the suite rather than quietly lying to the offline dialog's progress bar.
+ * the suite rather than quietly going out of date.
  */
 export const DRAWING_FONT_BYTES = 439_576;
-
-/** True when every face is already in the font cache. */
-export async function drawingFontsReady(): Promise<boolean> {
-  try {
-    const cache = await caches.open(FONT_CACHE);
-    for (const url of DRAWING_ASSETS) {
-      if (!(await cache.match(url, { ignoreVary: true }))) return false;
-    }
-    return true;
-  } catch {
-    return false;
-  }
-}

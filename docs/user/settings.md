@@ -117,6 +117,13 @@ another tab**. Nothing is different about your notes in that tab.
 runs short. The line under it is the browser's own estimate of what you are
 using and what you are allowed.
 
+The last line is about **the app itself**, not your notes: whether all of it
+has been downloaded for working offline. *Ready to work offline — all …
+files are here* means you can lose the network and lose nothing. If it says
+some files are still to download, **Download the rest now** fetches them
+while you wait; otherwise they arrive in the background by themselves. The
+desktop app shows neither, because it has nothing to download.
+
 ## Gotchas
 
 - **Settings are per device, not per vault.** They live in this browser's

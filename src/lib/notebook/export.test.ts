@@ -79,12 +79,12 @@ describe('htmlExport', () => {
       title: 't',
       bodyHtml: '',
       css: 'body{color:red}',
-      extraCss: ['.katex{display:inline}'],
+      extraCss: ['.ML__latex{display:inline}'],
     });
     expect(custom).not.toContain(NOTE_CSS);
     const base = custom.indexOf('body{color:red}');
     expect(base).toBeGreaterThan(-1);
-    expect(base).toBeLessThan(custom.indexOf('.katex{display:inline}'));
+    expect(base).toBeLessThan(custom.indexOf('.ML__latex{display:inline}'));
   });
 
   it('writes one @font-face per font, sourced from its data URL', () => {

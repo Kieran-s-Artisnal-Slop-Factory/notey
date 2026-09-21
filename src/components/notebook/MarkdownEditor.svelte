@@ -4,12 +4,14 @@
    *
    *  - Edit    — Milkdown Crepe (ProseMirror + remark: markdown in, markdown
    *              out), with syntax-highlighted code blocks, in-canvas `$math$`
-   *              and live mermaid previews inside fences.
+   *              typeset by MathLive (notebook/mathNode.ts, in place of
+   *              Crepe's KaTeX one) and live mermaid previews inside fences.
    *  - Source  — CodeMirror 6 over the exact same string. The bailout, since
    *              remark-stringify normalizes formatting on round-trip.
    *  - Preview — how the note renders, through this app's markdown path.
    *
-   * Plus three tools on the toolbar: **Diagram** (mermaid, with templates,
+   * Plus four tools on the toolbar: **Formula** (a MathLive mathfield —
+   * write the formula, not the LaTeX), **Diagram** (mermaid, with templates,
    * completions and a live preview), **Draw** (Excalidraw, saved as a PNG
    * with the scene embedded, so it reopens for editing) and **Footnotes**.
    *
@@ -77,8 +79,21 @@
     type FootnoteLink,
   } from '../../lib/notebook/footnotes';
   import { codeBlockLanguages } from '../../lib/notebook/code-languages';
-  import { ensureKatexCss } from '../../lib/math/fonts';
+  import { ensureMathCss } from '../../lib/math/fonts';
+  import {
+    cutMathAt,
+    mathBlockSchema,
+    mathEditPlugin,
+    mathInlineInputRule,
+    mathInlineSchema,
+    remarkMathPlugin,
+    strictMathPlugin,
+    selectedMath,
+    type MathTarget,
+  } from '../../lib/notebook/mathNode';
+  import { mathAt, mathMarkdown, unescapeDollars } from '../../lib/notebook/mathText';
   import MarkdownPreview from './MarkdownPreview.svelte';
+  import MathDialog from './MathDialog.svelte';
   import DiagramDialog from './DiagramDialog.svelte';
   import DrawingDialog from './DrawingDialog.svelte';
   import FootnoteDialog, {
@@ -88,9 +103,9 @@
   } from './FootnoteDialog.svelte';
   // Crepe's theme, one part file at a time. NOT `theme/common/style.css`: its
   // `latex.css` @imports katex's full stylesheet, which would pull sixty hashed
-  // font files into the build — the vendored KaTeX faces in `public/math/`
-  // are the one copy (ensureKatexCss). Skipped on purpose: latex, ai, diff,
-  // top-bar.
+  // font files into the build — the vendored faces in `public/math/` are the
+  // one copy (ensureMathCss). Skipped on purpose: latex (the feature is off —
+  // see mountCrepe), ai, diff, top-bar.
   import '@milkdown/crepe/theme/common/prosemirror.css';
   import '@milkdown/crepe/theme/common/reset.css';
   import '@milkdown/crepe/theme/common/block-edit.css';
@@ -182,6 +197,14 @@
   // The mermaid workbench: null = closed; `initial` seeds it from an existing
   // fence and `range` marks what to replace in source mode.
   let diagram = $state<{ initial: string; range: { from: number; to: number } | null } | null>(null);
+  /**
+   * The formula editor: null = closed. `range` is set in Source view, where
+   * the formula being edited is a stretch of text; `pos` in the canvas,
+   * where it is a node.
+   */
+  let math = $state<
+    (MathTarget & { range: { from: number; to: number } | null }) | null
+  >(null);
   // The drawing canvas: undefined = closed. `src` set = reopening that
   // drawing; null = a blank canvas.
   let drawing = $state<{ src: string; blob: Blob } | null | undefined>(undefined);
@@ -226,7 +249,8 @@
   const unescapeDoubleBrackets = (md: string) => md.replace(/\\(\[)\\?(\[[^\]\n]+\]\])/g, '$1$2');
 
   /** Repair everything remark-stringify mangles on a WYSIWYG round-trip. */
-  const unmangle = (md: string) => unescapeFootnotes(unescapeDoubleBrackets(md));
+  const unmangle = (md: string) =>
+    unescapeDollars(unescapeFootnotes(unescapeDoubleBrackets(md)));
 
   /**
    * Set when the component — not the author — is about to edit the ProseMirror
@@ -401,6 +425,63 @@
       offset = end + 1;
     }
     return null;
+  }
+
+  /* ── Formulas ──────────────────────────────────────────────────────── */
+
+  /**
+   * Open the formula editor — on the formula you are standing in, if you
+   * are standing in one.
+   *
+   * The two views answer "which formula" differently: in the canvas a
+   * formula is a node and the selected one is the answer (double-clicking
+   * one selects it and opens this on its own); in Source it is a stretch of
+   * text, found by reading around the cursor.
+   */
+  function openMath(): void {
+    if (mode === 'source' && cm) {
+      const found = mathAt(cm.state.doc.toString(), cm.state.selection.main.head);
+      math = found
+        ? { latex: found.latex, display: found.display, range: { from: found.from, to: found.to } }
+        : { latex: '', display: false, range: null };
+      return;
+    }
+    math = { ...(selectedMathTarget() ?? { latex: '', display: false }), range: null };
+  }
+
+  /** The formula selected in the canvas, or null. */
+  function selectedMathTarget(): MathTarget | null {
+    if (!crepe) return null;
+    try {
+      let found: MathTarget | null = null;
+      crepe.editor.action((ctx) => {
+        found = selectedMath(ctx.get(editorViewCtx));
+      });
+      return found;
+    } catch {
+      // Editor not ready — treat as "nothing selected".
+      return null;
+    }
+  }
+
+  /**
+   * Write the formula back as markdown.
+   *
+   * Editing one in the canvas is a cut and an insert: the old node comes out
+   * at the position the dialog was opened on, which leaves the caret there
+   * for the new one to land in.
+   */
+  function saveMath(latex: string, display: boolean): void {
+    const target = math;
+    math = null;
+    if (target?.pos !== undefined && crepe) {
+      try {
+        crepe.editor.action((ctx) => cutMathAt(ctx.get(editorViewCtx), target.pos!, display));
+      } catch {
+        // Editor gone or the node moved — insert at the caret instead.
+      }
+    }
+    replaceOrInsert(mathMarkdown(latex, display), target?.range ?? null, { inline: !display });
   }
 
   /** Open the workbench — editing the fence at the cursor when there is one. */
@@ -1125,6 +1206,11 @@
     crepe = new Crepe({
       root,
       defaultValue: current,
+      features: {
+        // Ours instead — MathLive everywhere, and display maths that is a
+        // formula rather than a code block. See lib/notebook/mathNode.ts.
+        [Crepe.Feature.Latex]: false,
+      },
       featureConfigs: {
         [Crepe.Feature.Placeholder]: { text: placeholder },
         [Crepe.Feature.ImageBlock]: {
@@ -1161,6 +1247,15 @@
       },
     });
     crepe.editor.use(footnoteReferenceRule);
+    // remark-math first: the schema's parse/serialize runners are written
+    // against the mdast nodes it produces.
+    crepe.editor
+      .use(remarkMathPlugin)
+      .use(strictMathPlugin)
+      .use(mathInlineSchema)
+      .use(mathBlockSchema)
+      .use(mathInlineInputRule)
+      .use(mathEditPlugin((target) => (math = { ...target, range: null })));
     crepe.on((listener) => {
       // `current` is still the pre-update markdown here, which is what the
       // footnote repair diffs against.
@@ -1315,9 +1410,10 @@
   }
 
   onMount(() => {
-    // The KaTeX stylesheet for Crepe's in-canvas math and the preview alike —
-    // the vendored one, never katex's own (60 hashed font files).
-    ensureKatexCss();
+    // MathLive's layout rules, for the canvas and the preview alike — the
+    // vendored copy, which borrows its faces from the font stylesheet
+    // instead of declaring twenty more.
+    ensureMathCss();
     if (initialMode === 'wysiwyg') void mountCrepe();
     else if (initialMode === 'source') mountCodeMirror();
   });
@@ -1355,6 +1451,16 @@
   style={`--editor-min-height: ${minHeight}`}
 >
   <div class="editor-toolbar" role="toolbar" aria-label="Editor tools">
+    <button
+      type="button"
+      class="tool"
+      data-testid="notebook-toolbar-math"
+      title="Write a formula — visually, not as LaTeX; double-click one to edit it"
+      disabled={mode === 'preview'}
+      onclick={openMath}
+    >
+      ∑ Formula
+    </button>
     <button
       type="button"
       class="tool"
@@ -1456,6 +1562,15 @@
     </div>
   {/if}
 </div>
+
+{#if math}
+  <MathDialog
+    initial={math.latex}
+    display={math.display}
+    onSave={saveMath}
+    onCancel={() => (math = null)}
+  />
+{/if}
 
 {#if diagram}
   <DiagramDialog
@@ -1693,31 +1808,40 @@
     height: auto;
   }
 
-  /* In-canvas math, without latex.css: inline formulas sit on the baseline
-     and the edit popup gets the app's surface. */
-  .editor-root :global(.milkdown span[data-type='math_inline']) {
-    padding: 0 0.2em;
+  /* In-canvas maths (lib/notebook/mathNode.ts). Both forms are atoms with
+     nothing to put a caret in, so they say "click me" instead: a tint under
+     the pointer, and ProseMirror's own ring when one is selected. */
+  .editor-root :global(.milkdown .math-node) {
+    padding: 0 0.15em;
+    border-radius: var(--radius-sm);
+    cursor: pointer;
+  }
+
+  .editor-root :global(.milkdown span.math-node) {
     display: inline-block;
     vertical-align: bottom;
   }
 
-  .editor-root :global(.milkdown .milkdown-latex-inline-edit[data-show='false']) {
-    display: none;
+  .editor-root :global(.milkdown .math-node-display) {
+    display: block;
+    text-align: center;
+    overflow-x: auto;
+    margin: var(--space-3) 0;
   }
 
-  .editor-root :global(.milkdown .milkdown-latex-inline-edit) {
-    position: absolute;
-    background: var(--surface-raised-color);
-    border: 1px solid var(--border-strong-color);
-    box-shadow: var(--shadow-2);
-    padding: var(--space-1) var(--space-2);
-    z-index: 2;
+  .editor-root :global(.milkdown .math-node:hover) {
+    background: var(--color-primary-soft);
   }
 
-  .editor-root :global(.milkdown .milkdown-latex-inline-edit input) {
-    width: auto;
-    min-width: 12em;
-    font-family: var(--font-mono);
+  .editor-root :global(.milkdown .math-node.ProseMirror-selectednode) {
+    outline: 2px solid var(--color-primary);
+    outline-offset: 1px;
+  }
+
+  .editor-root :global(.milkdown .math-node-empty) {
+    color: var(--text-muted-color);
+    font-style: italic;
+    font-size: var(--font-size-sm);
   }
 
   /*

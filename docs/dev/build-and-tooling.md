@@ -9,11 +9,12 @@ _Describes the code as of v0.1.0 (unreleased; schema v1) — verify against sour
 | Path | Role |
 | --- | --- |
 | [package.json](../../package.json) | Scripts and pinned dependencies |
-| [astro.config.mjs](../../astro.config.mjs) | Svelte integration, the Vue flags Crepe needs, the sqlite-wasm dev exclusion |
+| [astro.config.mjs](../../astro.config.mjs) | Svelte and precache integrations, the Vue flags Crepe needs, the sqlite-wasm dev exclusion |
+| [tools/astro-precache.mjs](../../tools/astro-precache.mjs) | Writes `dist/precache.json`, the service worker's download list |
 | [.github/workflows/astro.yml](../../.github/workflows/astro.yml) | Build and deploy to GitHub Pages |
 | [tools/preview-server.mjs](../../tools/preview-server.mjs) | Static server over `dist/`, used by the Playwright suite |
 | [tools/build-courier-prime.mjs](../../tools/build-courier-prime.mjs) | Vendors the typeface |
-| [tools/build-math-assets.mjs](../../tools/build-math-assets.mjs) | Vendors KaTeX's stylesheet and faces |
+| [tools/build-math-assets.mjs](../../tools/build-math-assets.mjs) | Vendors MathLive's stylesheets and the KaTeX faces it draws with |
 | [tools/build-excalidraw-assets.mjs](../../tools/build-excalidraw-assets.mjs) | Vendors the drawing canvas's faces |
 | [.claude/launch.json](../../.claude/launch.json) | Dev and preview server definitions |
 
@@ -25,7 +26,7 @@ _Describes the code as of v0.1.0 (unreleased; schema v1) — verify against sour
 | `npm run build` | Static build into `dist/` |
 | `npm run preview` | Astro's own preview |
 | `npm test` | Playwright: builds, serves `dist/` on 4340, runs the browser suite |
-| `npm run test:unit` | Vitest over `src/**/*.test.ts` |
+| `npm run test:unit` | Vitest over `src/**/*.test.ts` and `tools/**/*.test.mjs` |
 | `npm run tauri:dev` | The desktop app against the dev server |
 | `npm run tauri:build` | The desktop installer (needs Rust) |
 
@@ -34,9 +35,13 @@ build. `astro check` is the thing to add when that stops being acceptable.
 
 ## Astro config
 
-Three things in there are load-bearing:
+Four things in there are load-bearing:
 
-- `integrations: [svelte()]` — static output, no adapter.
+- `integrations: [svelte(), precache()]` — static output, no adapter.
+- `precache()` hooks `astro:build:done`, walks `dist/` and writes
+  `precache.json`: every file the build emitted, which the service worker
+  downloads in full on the first visit. See
+  [service-worker-and-offline.md](service-worker-and-offline.md).
 - `vite.define` sets `__VUE_OPTIONS_API__`, `__VUE_PROD_DEVTOOLS__` and
   `__VUE_PROD_HYDRATION_MISMATCH_DETAILS__` to `'false'`. Milkdown Crepe
   renders its feature UIs with Vue's runtime, which warns and keeps dead code

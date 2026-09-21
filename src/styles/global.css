@@ -333,6 +333,16 @@ textarea {
   color: var(--color-danger);
 }
 
+/* Display maths is its own line. MathLive's layout rules position the
+   glyphs inside a formula and say nothing about where the formula goes. */
+.prose .math-display {
+  display: block;
+  text-align: center;
+  overflow-x: auto;
+  overflow-y: hidden;
+  margin: var(--space-4) 0;
+}
+
 /* ── Prism token inks (rendered code blocks) ───────────────────────── */
 
 .token.comment,

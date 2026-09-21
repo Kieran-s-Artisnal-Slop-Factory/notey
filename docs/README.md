@@ -17,11 +17,11 @@ picture, the directory map, and the invariants everything else assumes.
 | [architecture.md](dev/architecture.md) | The mental model: stack, runtime flow, directory map, non-negotiable invariants |
 | [data-layer.md](dev/data-layer.md) | The vault — the `VaultStore` seam, the three backends, schema v1, frontmatter round-trips, what writes and when |
 | [ui.md](dev/ui.md) | The page and the command palette: no sidebar, the book, the view stack, settings-in-palette |
-| [editor.md](dev/editor.md) | The three faces, footnotes, diagrams, drawings, images, maths, and the change plumbing |
+| [editor.md](dev/editor.md) | The three faces, the formula editor, footnotes, diagrams, drawings, images, and the change plumbing |
 | [search-and-links.md](dev/search-and-links.md) | Wiki links, aliases, backlinks, the rename offer, search grammar and scoring |
 | [export.md](dev/export.md) | Markdown, the self-contained HTML file, print, and the bulk zip |
 | [design-system.md](dev/design-system.md) | Paper, desk and pen as three independent choices; the procedural textures; the red rule |
-| [service-worker-and-offline.md](dev/service-worker-and-offline.md) | Precache vs runtime cache vs the background crawl, cache versioning |
+| [service-worker-and-offline.md](dev/service-worker-and-offline.md) | The build's precache manifest, downloading all of it on the first visit, pruning, the Settings protocol |
 | [tauri.md](dev/tauri.md) | The desktop build: real `.md` files, the fs capability, what differs |
 | [testing.md](dev/testing.md) | The two suites, the test hook, per-spec coverage |
 | [build-and-tooling.md](dev/build-and-tooling.md) | Commands, the `tools/*.mjs` generators, vendoring, deployment, the release recipe |

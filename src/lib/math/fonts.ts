@@ -1,11 +1,11 @@
 /**
- * The vendored KaTeX faces MathLive renders formulas with.
+ * The vendored MathLive stylesheets, and the KaTeX faces it draws with.
  *
- * Namespaced `math/` rather than `napkin/` because they are not the napkin
- * tool's: any later maths rendering shares this one bundle rather than
- * vendoring a second copy of the same twenty files.
+ * Namespaced `math/` rather than after any one feature: the formula editor
+ * and a note being read share this one bundle rather than vendoring two
+ * copies of the same twenty files.
  *
- * The stylesheet is the whole mechanism. Its last rule is
+ * `mathlive-fonts.css` is the whole font mechanism. Its last rule is
  * `:root{--ML__static-fonts:true}`, which tells MathLive's own font loader to
  * stand down — so the library constructs no `FontFace`, probes for no fonts
  * directory, and the browser pulls each face on demand through
@@ -14,19 +14,14 @@
  * eagerly plus a stray `HEAD` when `MathfieldElement.fontsDirectory` is used
  * instead.
  *
- * Regenerate with `node tools/build-math-assets.mjs --force`.
+ * `mathlive-static.css` is the layout half — what turns the markup
+ * `convertLatexToMarkup` returns into a typeset formula. An open
+ * `<math-field>` injects its own copy of those rules, so this file is what a
+ * page with no editor on it (a note being read, the HTML export) needs.
+ *
+ * Regenerate both with `node tools/build-math-assets.mjs --force`.
  */
 import { href } from '../paths';
-
-/**
- * Its own cache, deliberately OUTSIDE the app-cache prefix.
- *
- * These are stable, unfingerprinted `public/` files, so a `CACHE_NAME` bump
- * must not evict them — re-downloading 260 KB of unchanged fonts because a
- * stylesheet changed would be as indefensible as re-downloading the
- * segmentation model. `public/sw.js` holds the same string.
- */
-export const FONT_CACHE = 'notey-fonts-v1';
 
 /** The twenty faces, as `public/math/PROVENANCE.txt` records them. */
 export const MATH_FONT_FILES: readonly string[] = [
@@ -52,68 +47,32 @@ export const MATH_FONT_FILES: readonly string[] = [
   'KaTeX_Typewriter-Regular.woff2',
 ];
 
-/**
- * Both stylesheets plus every face — what the offline bundle downloads.
- *
- * `katex.css` is KaTeX's layout stylesheet with its `@font-face` blocks
- * stripped: KaTeX declares the very same twenty families, so it borrows them
- * from `mathlive-fonts.css` instead of declaring them twice. The notebook's
- * `$…$` maths renders through it; MathLive never needs it.
- */
-export const MATH_ASSETS: readonly string[] = [
-  href('/math/mathlive-fonts.css'),
-  href('/math/katex.css'),
-  ...MATH_FONT_FILES.map((name) => href(`/math/fonts/${name}`)),
-];
+/** Where the layout rules live, for anything that has to inline them. */
+export const MATH_STATIC_CSS = '/math/mathlive-static.css';
 
-/**
- * Total bytes, from `public/math/PROVENANCE.txt`. A unit test reads that file
- * and checks this number, so a re-vendor that changes sizes fails the suite
- * rather than quietly lying to the offline dialog's progress bar.
- */
-export const MATH_FONT_BYTES = 282_448;
-
-/** True when every asset is already in the cache. */
-export async function fontsReady(): Promise<boolean> {
-  try {
-    const cache = await caches.open(FONT_CACHE);
-    for (const url of MATH_ASSETS) {
-      // `ignoreVary` because the SW stores whatever the server sent, and a
-      // Vary header we never asked about should not count as a miss.
-      if (!(await cache.match(url, { ignoreVary: true }))) return false;
-    }
-    return true;
-  } catch {
-    // No Cache Storage (a private window, a locked-down context) is a
-    // "not downloaded", not an error to surface.
-    return false;
-  }
-}
-
-const LINK_ID = 'ml-fonts';
+const FONT_LINK_ID = 'ml-fonts';
+const STATIC_LINK_ID = 'ml-static';
 
 /**
  * Put the font stylesheet in the document, once.
  *
- * Called from the mathfield wrapper's mount, never at module scope — a page
+ * Called from the formula editor's mount, never at module scope — a page
  * that never shows a formula should not carry the request.
  */
 export function ensureFontCss(): void {
-  appendStylesheet(LINK_ID, '/math/mathlive-fonts.css');
+  appendStylesheet(FONT_LINK_ID, '/math/mathlive-fonts.css');
 }
 
-const KATEX_LINK_ID = 'katex-css';
-
 /**
- * Put KaTeX's layout stylesheet in the document, once — and the font
- * stylesheet with it, since `katex.css` declares no faces of its own.
+ * Put both stylesheets in the document, once — the layout rules need the
+ * faces, and neither declares the other's half.
  *
  * Called from the notebook's mount, never at module scope, for the same
  * reason as `ensureFontCss`.
  */
-export function ensureKatexCss(): void {
+export function ensureMathCss(): void {
   ensureFontCss();
-  appendStylesheet(KATEX_LINK_ID, '/math/katex.css');
+  appendStylesheet(STATIC_LINK_ID, MATH_STATIC_CSS);
 }
 
 function appendStylesheet(id: string, path: string): void {

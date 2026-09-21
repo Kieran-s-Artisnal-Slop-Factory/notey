@@ -12,7 +12,7 @@ _Describes the code as of v0.1.0 (unreleased; schema v1) — verify against sour
 | Path | Role |
 | --- | --- |
 | [src/lib/notebook/export.ts](../../src/lib/notebook/export.ts) | `markdownExport`, `NOTE_CSS`, `htmlExport`, `externalReferences`, `printDocument` |
-| [src/lib/notebook/mathFonts.ts](../../src/lib/notebook/mathFonts.ts) | Which KaTeX faces a rendered note actually uses |
+| [src/lib/notebook/mathFonts.ts](../../src/lib/notebook/mathFonts.ts) | Which faces a rendered note's maths actually uses |
 | [src/lib/zip.ts](../../src/lib/zip.ts) | A dependency-free stored-only zip writer, and `zipEntries` to read one back |
 | [src/lib/vault/transfer.ts](../../src/lib/vault/transfer.ts) | `exportVault`, `importVault`, `describeImport` — the whole vault, out and in |
 | [src/lib/notebook/bulk.ts](../../src/lib/notebook/bulk.ts) | `exportFileName` — sanitising and clash suffixes |
@@ -25,10 +25,10 @@ _Describes the code as of v0.1.0 (unreleased; schema v1) — verify against sour
 flowchart TD
   A[markdown] --> B[off-screen div.prose, attached to the document]
   B --> C[renderMarkdown with resolveImage: asset refs to data URLs]
-  C --> D[renderMathIn: KaTeX typesets the data-math nodes]
+  C --> D[renderMathIn: MathLive typesets the data-math nodes]
   D --> E[renderInto: each pre.mermaid becomes inline SVG]
   E --> F[collectMathFonts reads COMPUTED styles for the faces used]
-  F --> G[fetch the vendored katex.css]
+  F --> G[fetch the vendored mathlive-static.css]
   G --> H[htmlExport: one document, one style block]
   H --> I[externalReferences audits what is left]
   I --> J[downloadText]
@@ -40,16 +40,17 @@ elements have none. Only those faces are embedded, as
 `data:font/woff2;base64` `@font-face` rules — a note with no maths embeds no
 fonts at all.
 
-What travels inside the file: the rendered body, `NOTE_CSS`, the KaTeX
-stylesheet when there is maths, the faces that maths used, every image as a
+What travels inside the file: the rendered body, `NOTE_CSS`, MathLive's
+layout stylesheet when there is maths, the faces that maths used, every image as a
 data URL, and every diagram as already-drawn SVG. What stays outside: only
 URLs you wrote yourself, and the export tells you how many.
 
 `htmlExport` never emits a `<script>` or a `<link>`; the whole stylesheet has
 `<` escaped as `\3c ` so nothing in CSS can close the `<style>` element or
 spell a tag, and the title is entity-escaped. The Playwright case asserts all
-of that, plus that the only absolute URLs left are XML namespace names, which
-KaTeX writes into its MathML and no browser resolves.
+of that, plus that the only absolute URLs left are XML namespace names,
+which a renderer writes into MathML and no browser resolves, and that the
+MathLive markup (`ML__latex`) is there.
 
 ## The Markdown export
 

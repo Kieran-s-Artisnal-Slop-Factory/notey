@@ -823,8 +823,129 @@ test.describe('editor', () => {
     await openNoteByLink(app, 'Maths');
     await app.page.getByTestId('notebook-mode-preview').click();
     const preview = app.page.getByTestId('notebook-preview');
-    await expect(preview.locator('.katex')).toHaveCount(1, { timeout: 30_000 });
+    // `.ML__latex` is MathLive's; KaTeX drew these until the formula editor
+    // arrived, and one engine for writing and another for reading is how a
+    // formula comes to look different in the two places.
+    await expect(preview.locator('.ML__latex')).toHaveCount(1, { timeout: 30_000 });
     await expect(preview).toContainText('$5 with $10');
+  });
+
+  test('the canvas typesets maths too, and still leaves prices alone', async ({ app }) => {
+    await openApp(app);
+    await app.write({
+      path: 'Canvas maths.md',
+      kind: 'note',
+      content: 'Inline $E=mc^2$ here.\n\n$$\n\\int_0^1 x\\,dx\n$$\n\nIt cost $5 and $10.\n',
+    });
+    await openNoteByLink(app, 'Canvas maths');
+    const canvas = app.page.locator('[data-testid="notebook-canvas"]');
+    // Two formulas: one in the sentence, one on its own line.
+    await expect(canvas.locator('.math-node')).toHaveCount(2, { timeout: 30_000 });
+    await expect(canvas.locator('.math-node.math-node-display')).toHaveCount(1);
+    await expect(canvas.locator('.math-node .ML__latex').first()).toBeVisible();
+    // micromark reads `$5 and $` as a formula — it strips a space from each
+    // side the way a code span does. strictMathPlugin hands it back, so the
+    // canvas agrees with the preview about what is money.
+    await expect(canvas).toContainText('It cost $5 and $10.');
+  });
+
+  test('a formula is written in the formula editor, not in LaTeX', async ({ app }) => {
+    await openApp(app);
+    await newNote(app.page);
+    await setTitle(app.page, 'Circles');
+    await typeInCanvas(app.page, 'The area is ');
+
+    await app.page.getByTestId('notebook-toolbar-math').click();
+    await expect(app.page.getByTestId('notebook-math-dialog')).toBeVisible({ timeout: 30_000 });
+    await expect(app.page.getByTestId('notebook-math-loading')).toHaveCount(0, { timeout: 60_000 });
+
+    // Typing "pi" produces π, not the letters: MathLive's inline shortcuts
+    // are what makes this easier than writing LaTeX, and they are left on.
+    await app.page.keyboard.type('pi');
+    const field = app.page.getByTestId('notebook-math-field');
+    await expect.poll(() => field.evaluate((el: HTMLElement & { value: string }) => el.value)).toBe(
+      String.raw`\pi`
+    );
+    // The LaTeX box is the same formula, for anyone who does know LaTeX.
+    await expect(app.page.getByTestId('notebook-math-latex')).toHaveValue(String.raw`\pi`);
+
+    await app.page.getByTestId('notebook-math-save').click();
+    await expect(app.page.getByTestId('notebook-math-dialog')).toHaveCount(0);
+    const node = app.page.locator('[data-testid="notebook-canvas"] .math-node');
+    await expect(node).toHaveAttribute('data-value', String.raw`\pi`, { timeout: 10_000 });
+    await expect(node.locator('.ML__latex')).toBeVisible();
+
+    // And in the file it is markdown, not a widget.
+    await expect
+      .poll(async () => (await app.read('Circles.md'))?.content, { timeout: 30_000 })
+      .toContain(String.raw`$\pi$`);
+  });
+
+  test('double-clicking a formula edits that formula, in place', async ({ app }) => {
+    await openApp(app);
+    await app.write({
+      path: 'Identity.md',
+      kind: 'note',
+      content: 'The identity $e^{i x} = 1$ is famous.\n',
+    });
+    await openNoteByLink(app, 'Identity');
+    const node = app.page.locator('[data-testid="notebook-canvas"] .math-node');
+    await expect(node).toHaveCount(1, { timeout: 30_000 });
+
+    await node.dblclick();
+    await expect(app.page.getByTestId('notebook-math-dialog')).toBeVisible({ timeout: 30_000 });
+    // It opens ON the formula, rather than on a blank one beside it.
+    await expect(app.page.getByTestId('notebook-math-latex')).toHaveValue(String.raw`e^{i x} = 1`);
+
+    await app.page.getByTestId('notebook-math-latex').fill('x = 1');
+    await app.page.getByTestId('notebook-math-save').click();
+    await expect(app.page.getByTestId('notebook-math-dialog')).toHaveCount(0);
+
+    // ONE formula, changed — not a second one appended at the end.
+    await expect(node).toHaveCount(1);
+    await expect(node).toHaveAttribute('data-value', 'x = 1', { timeout: 10_000 });
+    // (Saving stamps created/updated frontmatter on; the body is what matters.)
+    await expect
+      .poll(async () => (await app.read('Identity.md'))?.content, { timeout: 30_000 })
+      .toContain('The identity $x = 1$ is famous.\n');
+  });
+
+  test('in Source view the button edits the formula the cursor is in', async ({ app }) => {
+    await openApp(app);
+    await app.write({
+      path: 'Sums.md',
+      kind: 'note',
+      content: 'Before.\n\n$$\nx + y\n$$\n\nAfter.\n',
+    });
+    await openNoteByLink(app, 'Sums');
+    await app.page.getByTestId('notebook-mode-source').click();
+    const source = app.page.getByTestId('notebook-source');
+    await expect(source).toBeVisible({ timeout: 30_000 });
+    // Put the caret inside the block, then ask for the formula editor.
+    await source.getByText('x + y', { exact: true }).click();
+    await app.page.getByTestId('notebook-toolbar-math').click();
+    await expect(app.page.getByTestId('notebook-math-dialog')).toBeVisible({ timeout: 30_000 });
+    await expect(app.page.getByTestId('notebook-math-latex')).toHaveValue('x + y');
+    // It knows this one is set on its own line.
+    await expect(app.page.getByTestId('notebook-math-display')).toBeChecked();
+
+    await app.page.getByTestId('notebook-math-latex').fill('x - y');
+    await app.page.getByTestId('notebook-math-save').click();
+    await expect
+      .poll(async () => (await app.read('Sums.md'))?.content, { timeout: 30_000 })
+      .toContain('Before.\n\n$$\nx - y\n$$\n\nAfter.\n');
+  });
+
+  test('a dollar in prose survives the canvas', async ({ app }) => {
+    await openApp(app);
+    await newNote(app.page);
+    await setTitle(app.page, 'Budget');
+    // remark-stringify escapes every `$` once maths is switched on, so this
+    // came back out of the canvas as "costs \$7" until unescapeDollars.
+    await typeInCanvas(app.page, 'It costs $7 today.');
+    await expect
+      .poll(async () => (await app.read('Budget.md'))?.content, { timeout: 30_000 })
+      .toContain('It costs $7 today.');
   });
 
   test('the drawing canvas keeps the keyboard, and Escape belongs to it', async ({ app }) => {
@@ -956,10 +1077,12 @@ test.describe('exports', () => {
     expect(html).not.toContain('<script');
     expect(html).not.toContain('<link');
     // Nothing is fetched: the only absolute URLs left are XML namespace
-    // names, which KaTeX writes into its MathML and no browser resolves.
+    // names, which a renderer writes into its MathML and no browser resolves.
     const urls = html.match(/https?:\/\/[^"'\s)]+/g) ?? [];
     expect(urls.filter((url) => !url.startsWith('http://www.w3.org/'))).toEqual([]);
-    expect(html).toContain('katex');
+    // MathLive's markup AND its layout rules: the glyphs without the rules
+    // are a heap of spans in the wrong places.
+    expect(html).toContain('ML__latex');
     // The maths faces travel with the file rather than being linked.
     expect(html).toContain('@font-face');
     expect(html).toContain('data:font/woff2;base64,');
@@ -996,6 +1119,150 @@ test.describe('exports', () => {
     const text = bytes.toString('latin1');
     expect(text).toContain('Zip-one.md');
     expect(text).toContain('Zip-two.md');
+  });
+});
+
+test.describe('offline', () => {
+  // A whole-build download per test context, eight contexts at once, from one
+  // single-threaded static server: generous, and inside the test's own limit.
+  test.describe.configure({ timeout: 150_000 });
+
+  /**
+   * Ask the worker how much of the build it has. The page cannot work this
+   * out for itself: `precache.json` is the worker's list and the caches are
+   * the worker's, so every answer is a round trip.
+   */
+  async function offlineStatus(page: Page) {
+    return page.evaluate(
+      () =>
+        new Promise<{ ready: boolean; missing: number; total: number }>((resolve, reject) => {
+          const controller = navigator.serviceWorker.controller;
+          if (!controller) return reject(new Error('no service worker is controlling this page'));
+          const timer = setTimeout(() => reject(new Error('the worker did not answer')), 30_000);
+          const onMessage = (event: MessageEvent) => {
+            if (event.data?.type !== 'notey-offline-status') return;
+            clearTimeout(timer);
+            navigator.serviceWorker.removeEventListener('message', onMessage);
+            resolve(event.data);
+          };
+          navigator.serviceWorker.addEventListener('message', onMessage);
+          controller.postMessage({ type: 'notey-offline', action: 'status' });
+        })
+    );
+  }
+
+  test('one visit downloads the whole build, not just what was used', async ({ app }) => {
+    await openApp(app);
+    await app.page.evaluate(() => navigator.serviceWorker.ready.then(() => undefined));
+
+    // The download runs in the background from the moment the worker
+    // activates, so this is a wait, not a trigger. Generous: the whole
+    // build is several hundred files.
+    await expect
+      .poll(async () => (await offlineStatus(app.page)).ready, { timeout: 120_000 })
+      .toBe(true);
+
+    const status = await offlineStatus(app.page);
+    // Every file the build emitted — pages and chunks nobody opened, the
+    // sqlite engine, every font. A crawl over the shell used to guess at
+    // this list and miss whatever it could not see in minified code.
+    expect(status.total).toBeGreaterThan(300);
+    expect(status.missing).toBe(0);
+
+    // And they really are in Cache Storage, not just counted.
+    const cached = await app.page.evaluate(async () => {
+      let n = 0;
+      for (const key of await caches.keys()) n += (await (await caches.open(key)).keys()).length;
+      return n;
+    });
+    expect(cached).toBeGreaterThanOrEqual(status.total);
+  });
+
+  test('an update keeps the previous build for tabs still running it, and no older', async ({
+    app,
+  }) => {
+    await openApp(app);
+    await expect
+      .poll(async () => (await offlineStatus(app.page)).ready, { timeout: 120_000 })
+      .toBe(true);
+
+    // Pretend two deployments happened before this one: the worker's note
+    // says the last build it finished was "previous-build", and the one
+    // before that had a chunk of its own.
+    const base = new URL(app.page.url()).pathname.replace(/[^/]*$/, '');
+    const previousChunk = base + '_astro/from-the-previous-build.js';
+    const olderChunk = base + '_astro/from-two-builds-ago.js';
+    await app.page.evaluate(
+      async ({ base, previousChunk, olderChunk }) => {
+        const cache = await caches.open('notey-cache-v3');
+        await cache.put(previousChunk, new Response('// previous'));
+        await cache.put(olderChunk, new Response('// older'));
+        await cache.put(
+          base + '__notey-precache-state',
+          new Response(
+            JSON.stringify({ built: 'previous-build', urls: [previousChunk], previous: [olderChunk] })
+          )
+        );
+      },
+      { base, previousChunk, olderChunk }
+    );
+
+    // A complete run of THIS build now demotes "previous-build" to the
+    // generation it keeps, and lets the one before that go.
+    await app.page.evaluate(
+      () =>
+        new Promise<void>((resolve) => {
+          const onMessage = (event: MessageEvent) => {
+            if (event.data?.type !== 'notey-offline-done') return;
+            navigator.serviceWorker.removeEventListener('message', onMessage);
+            resolve();
+          };
+          navigator.serviceWorker.addEventListener('message', onMessage);
+          navigator.serviceWorker.controller!.postMessage({ type: 'notey-offline', action: 'download' });
+        })
+    );
+    const left = await app.page.evaluate(
+      async ({ previousChunk, olderChunk }) => {
+        const cache = await caches.open('notey-cache-v3');
+        return {
+          previous: Boolean(await cache.match(previousChunk)),
+          older: Boolean(await cache.match(olderChunk)),
+        };
+      },
+      { previousChunk, olderChunk }
+    );
+    // A tab opened before the update is still running that build's code, and
+    // its lazy chunks exist nowhere else once the host has replaced them.
+    expect(left.previous).toBe(true);
+    // Two builds back is gone: nothing should still be running it.
+    expect(left.older).toBe(false);
+  });
+
+  test('settings say how much is left, and keep saying it until it is done', async ({
+    app,
+  }) => {
+    await openApp(app);
+    await expect
+      .poll(async () => (await offlineStatus(app.page)).ready, { timeout: 120_000 })
+      .toBe(true);
+
+    // Lose three files, the way an evicted entry or a run cut short would,
+    // while this worker still believes it finished.
+    await app.page.evaluate(async () => {
+      const cache = await caches.open('notey-cache-v3');
+      const chunks = (await cache.keys()).filter((r) => /\/_astro\/.+\.js$/.test(r.url));
+      for (const request of chunks.slice(0, 3)) await cache.delete(request);
+    });
+
+    await runCommand(app.page, 'Settings');
+    const line = app.page.getByTestId('notey-offline-status');
+    await expect(line).toBeVisible({ timeout: 30_000 });
+    // Opening the panel is enough: the question itself sets the worker going
+    // again, and the line keeps itself current rather than stopping at the
+    // count it was opened with.
+    await expect(line).toContainText('Ready to work offline', { timeout: 60_000 });
+    // Nothing left to fetch, so there is nothing to press.
+    await expect(app.page.getByTestId('notey-offline-download')).toHaveCount(0);
   });
 });
 

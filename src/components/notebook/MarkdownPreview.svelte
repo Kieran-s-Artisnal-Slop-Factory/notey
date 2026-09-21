@@ -2,7 +2,7 @@
   /**
    * Rendered markdown, the way a published note shows it — through this app's
    * ONE markdown path (`renderMarkdown`: marked + DOMPurify + Prism), then two
-   * client-side passes over the sanitized HTML: KaTeX for `$…$` math and
+   * client-side passes over the sanitized HTML: MathLive for `$…$` math and
    * mermaid for the ```mermaid fences the pipeline leaves as `<pre class="mermaid">`.
    *
    * Ported from retoken's MarkdownPreview (Decision 7: retoken's remark/rehype

@@ -1,12 +1,15 @@
 /**
- * Which KaTeX faces a rendered note actually uses, as data URLs — what the
+ * Which faces a rendered note actually uses, as data URLs — what the
  * self-contained HTML export inlines.
+ *
+ * MathLive positions glyphs with CSS and DRAWS them with the KaTeX faces, so
+ * a formula in a file somebody opens on a machine that has never heard of
+ * this app needs the faces to travel with it.
  *
  * Measured, not mapped: the faces are read back from the computed
  * `font-family` / `font-weight` / `font-style` of every element inside the
- * rendered maths, the way the napkin-math component does it. A table from
- * KaTeX class names to faces would go stale with the next KaTeX release; the
- * browser's answer cannot. The root must be in the document for computed
+ * rendered maths. A table from MathLive's class names to faces would go
+ * stale with the next release; the browser's answer cannot. The root must be in the document for computed
  * styles to exist — callers render into an attached, off-screen container.
  *
  * Browser-only (computed styles, fetch); nothing here is unit-tested.
@@ -35,7 +38,7 @@ async function toDataUrl(blob: Blob): Promise<string> {
 /** The faces used under `root`, each fetched once from the vendored set. */
 export async function collectMathFonts(root: ParentNode): Promise<MathFontFace[]> {
   const wanted = new Map<string, { family: string; weight: string; style: string }>();
-  for (const el of root.querySelectorAll<HTMLElement>('.katex, .katex *')) {
+  for (const el of root.querySelectorAll<HTMLElement>('.ML__latex, .ML__latex *')) {
     const css = getComputedStyle(el);
     const family = css.fontFamily.split(',')[0]?.trim().replace(/^["']|["']$/g, '') ?? '';
     if (!family.startsWith('KaTeX_')) continue;

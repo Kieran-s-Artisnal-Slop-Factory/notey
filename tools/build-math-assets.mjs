@@ -1,9 +1,11 @@
 /**
- * Vendors MathLive's KaTeX web fonts into public/math/.
+ * Vendors MathLive's stylesheets and KaTeX web fonts into public/math/.
  *
- * The napkin-math editor renders formulas with MathLive, which draws them out
- * of twenty KaTeX faces. Those faces have to be served from this origin: the
- * app is offline-first and nothing in it may reach the network to work.
+ * Maths is written and drawn by MathLive — the `<math-field>` in the formula
+ * editor and `convertLatexToMarkup` for a note that is only being read — and
+ * MathLive draws out of twenty KaTeX faces. Those faces have to be served
+ * from this origin: the app is offline-first and nothing in it may reach the
+ * network to work.
  *
  * `mathlive-fonts.css` is copied VERBATIM, not rewritten. Its `url(fonts/…)`
  * are relative and resolve correctly once the file sits beside a `fonts/`
@@ -11,27 +13,29 @@
  * that tells MathLive's own font loader to stand down, so the library never
  * constructs a `FontFace` or probes for a fonts directory of its own.
  *
- * `katex.css` is KaTeX's own `katex.min.css` with every `@font-face` block
- * REMOVED. KaTeX declares the same twenty families (the MathLive faces ARE the
- * KaTeX faces), so `mathlive-fonts.css` already provides them — what remains
- * is ~20 KB of layout rules the notebook needs to render `$…$` maths, and the
- * one stylesheet the self-contained HTML export inlines.
+ * `mathlive-static.css` is copied with every `@font-face` block REMOVED. It
+ * declares the same twenty faces `mathlive-fonts.css` does, and two
+ * declarations of one family is one too many; what remains is ~9 KB of
+ * layout rules. Those rules are what turn `convertLatexToMarkup`'s output
+ * into a typeset formula, so they are needed wherever a note is READ — the
+ * preview, the reader, and inlined into the self-contained HTML export. (An
+ * open `<math-field>` injects its own copy; a page with no editor on it gets
+ * nothing unless this file is there.)
  *
  * NOT vendored, deliberately:
- *  - `mathlive-static.css` — 13 KB of layout rules the library already injects
- *    itself. Shipping both gives two sources for the same rules.
  *  - the five `.wav` keypress sounds (227 KB). `soundsDirectory = null`
  *    switches them off; a Playwright check asserts none is ever requested.
- *  - `@cortex-js/compute-engine` — plain JavaScript, so Vite bundles it.
+ *  - `@cortex-js/compute-engine` (2.5 MB). It is what MathLive would use to
+ *    EVALUATE a formula; notey only ever reads LaTeX back out, so nothing
+ *    imports it and Vite never sees it.
  *
  * The output is COMMITTED. This script exists so the provenance is
  * reproducible, not so anything is fetched at run time.
  *
  *   node tools/build-math-assets.mjs [--force]
  *
- * Licences: MathLive is MIT (Copyright (c) 2017 Arno Gourdol). KaTeX, its
- * stylesheet and the faces are MIT (Copyright (c) 2013-2020 Khan Academy and
- * contributors).
+ * Licences: MathLive is MIT (Copyright (c) 2017 Arno Gourdol). The faces are
+ * KaTeX's, MIT (Copyright (c) 2013-2020 Khan Academy and contributors).
  */
 import { createHash } from 'node:crypto';
 import { copyFileSync, existsSync, mkdirSync, readdirSync, readFileSync, statSync, writeFileSync } from 'node:fs';
@@ -45,9 +49,7 @@ const SRC_FONTS = join(SRC_DIR, 'fonts');
 const OUT_DIR = resolve(ROOT, 'public/math');
 const OUT_FONTS = join(OUT_DIR, 'fonts');
 const CSS_NAME = 'mathlive-fonts.css';
-const KATEX_DIR = resolve(ROOT, 'node_modules/katex');
-const KATEX_SRC = join(KATEX_DIR, 'dist/katex.min.css');
-const KATEX_CSS_NAME = 'katex.css';
+const STATIC_CSS_NAME = 'mathlive-static.css';
 
 /** The face count is the invariant: a partial copy renders half the glyphs. */
 const EXPECTED_FONTS = 20;
@@ -69,13 +71,10 @@ if (faces.length !== EXPECTED_FONTS) {
   );
 }
 
-const cssSource = join(SRC_DIR, CSS_NAME);
-if (!existsSync(cssSource)) {
-  throw new Error(`${CSS_NAME} is missing from the mathlive package — refusing to write.`);
-}
-
-if (!existsSync(KATEX_SRC)) {
-  throw new Error('katex is not installed — run npm install first.');
+for (const name of [CSS_NAME, STATIC_CSS_NAME]) {
+  if (!existsSync(join(SRC_DIR, name))) {
+    throw new Error(`${name} is missing from the mathlive package — refusing to write.`);
+  }
 }
 
 mkdirSync(OUT_FONTS, { recursive: true });
@@ -94,39 +93,39 @@ for (const name of [...faces.map((f) => join('fonts', f)), CSS_NAME]) {
 }
 
 /**
- * katex.min.css minus its twenty `@font-face` blocks. The blocks are minified
- * onto one line with no nested braces, so a non-greedy brace match is exact;
- * the count is asserted so a KaTeX release that changes shape fails loudly
- * instead of shipping a stylesheet that quietly re-declares the faces.
+ * mathlive-static.css minus its twenty `@font-face` blocks. The blocks are
+ * minified onto one line with no nested braces, so a non-greedy brace match
+ * is exact; the count is asserted so a MathLive release that changes shape
+ * fails loudly instead of shipping a stylesheet that quietly re-declares the
+ * faces over `url(fonts/…)` paths that are wrong for where this file sits.
  */
-const katexFull = readFileSync(KATEX_SRC, 'utf8');
-const faceBlocks = katexFull.match(/@font-face\{[^{}]*\}/g) ?? [];
+const staticFull = readFileSync(join(SRC_DIR, STATIC_CSS_NAME), 'utf8');
+const faceBlocks = staticFull.match(/@font-face\{[^{}]*\}/g) ?? [];
 if (faceBlocks.length !== EXPECTED_FONTS) {
   throw new Error(
-    `expected ${EXPECTED_FONTS} @font-face blocks in katex.min.css, found ${faceBlocks.length} ` +
-      '— refusing to write.'
+    `expected ${EXPECTED_FONTS} @font-face blocks in ${STATIC_CSS_NAME}, found ` +
+      `${faceBlocks.length} — refusing to write.`
   );
 }
-const katexLayout = katexFull.replace(/@font-face\{[^{}]*\}/g, '').trim() + '\n';
-if (/@font-face|url\(/.test(katexLayout)) {
-  throw new Error('katex.css still references a font or URL after stripping — refusing to write');
+const staticLayout = staticFull.replace(/@font-face\{[^{}]*\}/g, '').trim() + '\n';
+if (/@font-face|url\(/.test(staticLayout)) {
+  throw new Error(`${STATIC_CSS_NAME} still references a font or URL after stripping — refusing`);
 }
 {
-  const to = join(OUT_DIR, KATEX_CSS_NAME);
+  const to = join(OUT_DIR, STATIC_CSS_NAME);
   if (existsSync(to) && !force) {
     skipped++;
   } else {
-    writeFileSync(to, katexLayout, 'utf8');
-    copied.push(KATEX_CSS_NAME);
+    writeFileSync(to, staticLayout, 'utf8');
+    copied.push(STATIC_CSS_NAME);
   }
 }
 
 const version = JSON.parse(readFileSync(join(SRC_DIR, 'package.json'), 'utf8')).version;
-const katexVersion = JSON.parse(readFileSync(join(KATEX_DIR, 'package.json'), 'utf8')).version;
 const entries = [
   ...faces.map((f) => join('fonts', f).replaceAll('\\', '/')),
   CSS_NAME,
-  KATEX_CSS_NAME,
+  STATIC_CSS_NAME,
 ].map((name) => {
   const path = join(OUT_DIR, name);
   return { name, bytes: statSync(path).size, hash: sha256(path) };
@@ -136,20 +135,19 @@ const total = entries.reduce((sum, e) => sum + e.bytes, 0);
 writeFileSync(
   join(OUT_DIR, 'PROVENANCE.txt'),
   [
-    'MathLive KaTeX web fonts and the KaTeX layout stylesheet, vendored for offline use.',
+    'MathLive stylesheets and KaTeX web fonts, vendored for offline use.',
     '',
     `source:      node_modules/mathlive @ ${version}`,
-    `             node_modules/katex @ ${katexVersion} (katex.css = dist/katex.min.css`,
-    '             with its 20 @font-face blocks removed; mathlive-fonts.css declares',
-    '             the same families over the same faces)',
+    `             (${STATIC_CSS_NAME} has its 20 @font-face blocks removed;`,
+    `             ${CSS_NAME} declares the same families over the same faces)`,
     'licence:     MIT (MathLive, (c) 2017 Arno Gourdol)',
-    '             MIT (KaTeX, its stylesheet and faces, (c) 2013-2020 Khan Academy',
-    '             and contributors)',
+    '             MIT (the KaTeX faces, (c) 2013-2020 Khan Academy and',
+    '             contributors)',
     'regenerate:  node tools/build-math-assets.mjs --force',
     '',
-    'Not vendored: mathlive-static.css (the library injects those rules itself),',
-    'the five .wav keypress sounds (soundsDirectory = null switches them off), and',
-    '@cortex-js/compute-engine (plain JS, bundled by Vite).',
+    'Not vendored: the five .wav keypress sounds (soundsDirectory = null switches',
+    'them off) and @cortex-js/compute-engine, which evaluates formulas — notey',
+    'only reads LaTeX back out, so nothing imports it.',
     '',
     `${entries.length} files, ${total} bytes total`,
     '',

@@ -19,7 +19,9 @@ desktop program that writes plain `.md` files to a folder you own.
 - **A real editor**, ported from [useful](../useful): rich WYSIWYG, raw
   Markdown and rendered Preview over one string; footnotes with a dialog
   (Alt+0); mermaid diagrams with a template workbench; Excalidraw drawings
-  saved as re-editable PNGs; pasted images; KaTeX maths.
+  saved as re-editable PNGs; pasted images; and a **formula editor** —
+  MathLive, so you write maths as it looks (`pi` → π, `/` → a fraction)
+  and it is saved as ordinary `$…$` markdown.
 - **`[[Wiki links]]`** resolved by title, with computed backlinks, automatic
   aliases on rename, and a one-press offer to rewrite the links that still
   point at the old name.
@@ -39,8 +41,8 @@ desktop program that writes plain `.md` files to a folder you own.
 - **As many tabs as you like.** One tab holds the database and serves the
   others; a note has one writer at a time, and a tab that opens a note
   another tab is writing reads it until that tab moves on.
-- **Offline**, installable, and durable — a service worker that precaches the
-  shell and crawls the rest in the background.
+- **Offline**, installable, and durable — the first visit downloads the
+  whole app, every feature and font, and Settings says when it is done.
 
 ## Storage
 
@@ -85,10 +87,11 @@ npm run tauri:build    # an installer (needs Rust)
 
 ## Offline & installability
 
-Install it from the browser's address bar. After the first visit everything
-works offline, including pages you have not opened — the service worker
-crawls the asset graph in the background. Diagrams and the drawing canvas
-arrive the first time you use them.
+Install it from the browser's address bar. The first visit downloads the
+whole app in the background — the build writes out the list of every file it
+made, and the service worker fetches all of it — so afterwards everything
+works offline, including features you have never opened. Settings shows
+when it has finished.
 
 ## Backups
 

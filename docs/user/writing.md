@@ -1,7 +1,7 @@
 # Writing
 
 Three ways of looking at the same note, and a small toolbar for the things
-plain text cannot do: footnotes, diagrams, drawings, images and maths.
+plain text cannot do: formulas, diagrams, drawings, footnotes and images.
 
 _Describes the code as of v0.1.0 (unreleased; schema v1) — verify against source when in doubt._
 
@@ -11,7 +11,7 @@ The buttons on the right of the toolbar switch between them. The note is the
 same text underneath all three.
 
 - **Edit** is the rich view: headings, lists, tables, code blocks with a
-  language picker, images and `$maths$`, all rendered as you type. A
+  language picker, images and formulas, all rendered as you type. A
   `mermaid` code block draws itself right there.
 - **Source** is the markdown itself, in a code editor. Use it when you want to
   see exactly what will be saved, or when the rich view has tidied something
@@ -36,6 +36,37 @@ In the rich view the notes themselves stay out of the writing on purpose —
 they are not prose. They live at the foot of the markdown (see Source) and in
 that dialog. A line under the toolbar warns about a citation with no note, a
 note nobody cites, or a label used twice.
+
+## Formulas
+
+**∑ Formula** opens a formula editor where you write maths the way it looks,
+not as code. Type and it typesets as you go:
+
+- `/` makes a fraction; `^` a power; `_` a subscript.
+- Words become symbols: `pi` → π, `sqrt` → √, `sum` → Σ with its limits,
+  `int` → ∫, `infty` → ∞, `alpha`, `beta`, `theta` and the rest of the
+  Greek alphabet.
+- Tab moves between the empty boxes in a fraction or a sum.
+- The row of buttons above covers fractions, roots, powers, subscripts,
+  sums, integrals, brackets that grow, and a matrix. The ⌨ inside the field
+  opens a full on-screen maths keyboard.
+
+The **LaTeX** box underneath is the same formula written out. Edit either
+one and the other follows, so if you do know LaTeX you can paste it in.
+
+Tick **On its own line** for a formula that should sit centred on a line of
+its own; leave it for one that belongs inside a sentence. **Insert formula**
+puts it in the note.
+
+**To change a formula, double-click it.** A single click selects it — that
+is how you delete one (Backspace) or drag it somewhere else. In Source, put
+the cursor anywhere inside a formula and press ∑ Formula.
+
+Formulas are saved as ordinary markdown maths — `$…$` in a sentence,
+`$$…$$` on their own lines — so the file still reads anywhere. You can still
+type `$x^2$` straight into the note if you prefer; it becomes a formula when
+you type the closing `$`. A price — `$5 and $10` — is left alone, because
+maths may not start or end with a space or be followed by a digit.
 
 ## Diagrams
 
@@ -69,14 +100,6 @@ Paste or drop an image into the rich view and it is stored beside the note and
 shown in place. Each image may be at most **2 MB**; a bigger one is refused
 with a line naming its size and the limit.
 
-## Maths
-
-Write `$…$` for inline maths and `$$…$$` on their own lines (or a `math` code
-block) for display maths. A price — `$5 and $10` — is left alone, because
-maths may not start or end with a space or be followed by a digit. Preview,
-the HTML export and the print all typeset it; the rich view shows it in place
-and opens a small editor when you click it.
-
 ## Gotchas
 
 - **Switching faces loses undo history.** Edit, Source and Preview each start
@@ -89,7 +112,10 @@ and opens a small editor when you click it.
   move off it.
 - **Mermaid's error messages are mermaid's.** A diagram that will not parse
   stays as its text with the first line of the message above it.
-- **Diagrams and drawings arrive when first used.** The mermaid engine is
-  about a megabyte and the drawing canvas rather more; both are then cached
-  and work offline.
+- **Escape belongs to the formula editor while you are typing in it** — it
+  is how you leave a half-typed `\command`. **Cancel** or the × closes it
+  without saving, and so does Escape once the cursor is out of the formula.
+- **A line with both a price and a formula** — `costs $7 and $x^2$` — shows
+  the formula as plain `$x^2$` in the rich view. The note is saved exactly
+  as written, and Preview typesets it properly.
 - **An image over 2 MB is refused, not resized.** Shrink it first.

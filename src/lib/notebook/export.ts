@@ -89,7 +89,7 @@ pre code{background:none;padding:0;font-size:1em}
 .token.function,.token.class-name,.token.selector,.token.tag{color:#102a56;font-weight:600}
 .token.operator,.token.punctuation{color:#3f5c8c}
 .token.property,.token.attr-name,.token.variable,.token.builtin{color:#14305e}
-.math-display,.katex-display{overflow-x:auto;overflow-y:hidden;padding:.2em 0}
+.math-display{overflow-x:auto;overflow-y:hidden;padding:.2em 0}
 pre.mermaid{background:none;border:0;padding:0;text-align:center}
 .mermaid-rendered svg,pre.mermaid svg{max-width:100%;height:auto;margin:0 auto}
 sup.footnote-ref a,a[data-footnote-ref]{text-decoration:none;font-weight:600;padding:0 .1em}
@@ -115,7 +115,7 @@ export interface HtmlExportInput {
   bodyHtml: string;
   /** Replaces NOTE_CSS when given. */
   css?: string;
-  /** Appended after the base stylesheet — KaTeX's CSS, say. */
+  /** Appended after the base stylesheet — MathLive's layout rules, say. */
   extraCss?: string[];
   /** Becomes one @font-face each; entries whose URL is not a data: URL are dropped. */
   fonts?: { family: string; weight?: string; style?: string; dataUrl: string }[];

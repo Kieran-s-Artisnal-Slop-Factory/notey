@@ -25,6 +25,12 @@
     type StartupMode,
   } from '../lib/prefs';
   import { requestPersistentStorage, storageEstimate, type PersistState } from '../lib/persistence';
+  import {
+    describeOffline,
+    downloadOffline,
+    offlineStatus,
+    type OfflineStatus,
+  } from '../lib/offline';
   import { openVaultStore } from '../lib/vault/store';
   import {
     dbFileName,
@@ -48,6 +54,10 @@
   let vaultBytes = $state<number | null>(null);
   let estimate = $state<{ usage: number; quota: number } | null>(null);
   let persistState = $state<PersistState | null>(null);
+  /** What the service worker says about the offline copy; null = no worker. */
+  let offline = $state<OfflineStatus | null>(null);
+  /** Files fetched so far in a download the panel asked for. */
+  let offlineProgress = $state<{ done: number; total: number } | null>(null);
   /** What the last export or import did, in one line, or what went wrong. */
   let transferNote = $state<string | null>(null);
   let transferring = $state(false);
@@ -72,8 +82,44 @@
         backend = 'failed to open: ' + String(err);
       }
       estimate = await storageEstimate();
+      offline = await offlineStatus();
     })();
   });
+
+  /**
+   * Keep the line current while the background download is still going.
+   *
+   * It was asked once, on open, and a panel opened part way through said
+   * "25 of 376 files still to download" until it was closed — after the
+   * download had finished. Each question also nudges the worker to carry on
+   * (see sw.js), so an open panel is what finishes a run that stalled.
+   */
+  $effect(() => {
+    if (!offline || offline.ready || offlineProgress) return;
+    const timer = setInterval(() => {
+      void offlineStatus().then((next) => {
+        if (next) offline = next;
+      });
+    }, 2_000);
+    return () => clearInterval(timer);
+  });
+
+  /**
+   * Finish the download the worker started by itself.
+   *
+   * Only ever needed by someone who is about to lose the network before the
+   * background run got there — which is exactly when nobody wants to find
+   * out that a chunk is missing.
+   */
+  async function fetchTheRest(): Promise<void> {
+    offlineProgress = { done: 0, total: 0 };
+    try {
+      await downloadOffline((done, total) => (offlineProgress = { done, total }));
+      offline = await offlineStatus();
+    } finally {
+      offlineProgress = null;
+    }
+  }
 
   /**
    * The whole vault as a zip of the folders and files it would be on disk.
@@ -435,6 +481,24 @@
         <p class="muted line">
           The browser says {mb(estimate.usage)} used of {mb(estimate.quota)} allowed.
         </p>
+      {/if}
+      {#if offline}
+        <p class="muted line" data-testid="notey-offline-status">
+          {offlineProgress
+            ? `Downloading… ${offlineProgress.done} of ${offlineProgress.total}`
+            : describeOffline(offline)}
+        </p>
+        {#if !offline.ready}
+          <div class="row">
+            <button
+              class="btn btn-sm"
+              data-testid="notey-offline-download"
+              disabled={offlineProgress !== null}
+              onclick={() => void fetchTheRest()}>Download the rest now</button
+            >
+            <span class="muted">Everything works without a network once this is done.</span>
+          </div>
+        {/if}
       {/if}
     {/if}
   </section>

@@ -3,13 +3,18 @@ import { defineConfig } from 'astro/config';
 
 import svelte from '@astrojs/svelte';
 
+import precache from './tools/astro-precache.mjs';
+
 // https://astro.build/config
 export default defineConfig({
   // Serving under a sub-path (e.g. GitHub Pages at https://you.github.io/notey/)?
   // The CI workflow passes --base "/notey"; every in-app link, the service
   // worker, and the manifest resolve through it (src/lib/paths.ts). Leave it
   // off here so local dev serves at the root.
-  integrations: [svelte()],
+  // `precache()` writes dist/precache.json — the list the service worker
+  // downloads in full during install, so everything works offline after one
+  // visit. See docs/dev/service-worker-and-offline.md.
+  integrations: [svelte(), precache()],
   vite: {
     // sqlite-wasm locates its .wasm relative to its own module URL; Vite's
     // dev-time pre-bundling rewrites that path to a .vite/deps URL that

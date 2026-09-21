@@ -17,26 +17,26 @@ away. See the gotchas.
 
 ## What works offline
 
-Everything. Notes are stored in your browser, not on a server, so there is
-nothing to be disconnected from. The first visit downloads the app; after
-that a background job quietly fetches the parts you have not used yet, so
-even pages you have never opened work on a plane.
+Everything, including the parts you have not used yet. Notes are stored in
+your browser, not on a server, so there is nothing to be disconnected from.
 
-Two things arrive the first time you use them rather than up front, because
-they are large:
+The first visit downloads **the whole app**: the editor, the formula editor,
+the diagram engine, the drawing canvas, the database engine and every font.
+It carries on in the background while you use the app. Once it has finished,
+every page and every feature works on a plane — even ones you have never
+opened.
 
-- the **mermaid** engine, when you render your first diagram;
-- the **drawing canvas**, when you first press ✏ Draw.
+**Settings → Your vault** says whether it has finished: *Ready to work
+offline — all … files are here.* If you are about to lose the network and it
+has not, **Download the rest now** fetches whatever is left while you wait.
 
-Both are cached afterwards. If you want them offline, open each once while
-you still have a connection.
+## The one-time download
 
-## The one-time downloads
-
-The editor is a real rich-text editor with a maths typesetter inside it, so
-the first load is not small — expect a noticeable wait on a slow connection,
-once. The typeface, the maths fonts and the drawing fonts are all served by
-notey itself; nothing is fetched from Google or a CDN, ever.
+It is about 15 MB, most of it the diagram engine, and it happens once —
+expect a noticeable wait on a slow connection, the first time only. After an
+update, only what changed is fetched. The typeface, the maths fonts and the
+drawing fonts are all served by notey itself; nothing is fetched from Google
+or a CDN, ever.
 
 ## Keeping your notes
 

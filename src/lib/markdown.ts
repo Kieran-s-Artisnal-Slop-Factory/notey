@@ -10,7 +10,7 @@
  *     notebook route; `exists` marks the ones that would create a note),
  *   - GFM footnotes, numbered in first-use order and collected at the foot,
  *   - `$…$` / `$$…$$` / ```math maths, emitted as source in `data-math` for
- *     `notebook/math.ts` to typeset lazily — KaTeX is never imported here,
+ *     `notebook/math.ts` to typeset lazily — MathLive is never imported here,
  *   - ```mermaid fences, emitted as `<pre class="mermaid">` for
  *     `notebook/mermaid.ts` to draw lazily,
  *   - `resolveImage`, which maps relative and `asset:` sources (never absolute
@@ -263,7 +263,7 @@ function footnoteSection(state: FootnoteState): string {
 }
 
 // ---------------------------------------------------------------------------
-// Maths and mermaid. Source only — nothing here imports KaTeX or mermaid.
+// Maths and mermaid. Source only — nothing here imports MathLive or mermaid.
 // ---------------------------------------------------------------------------
 
 interface MathToken extends Tokens.Generic {

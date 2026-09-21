@@ -30,6 +30,7 @@
   import { renderMathIn } from '../lib/notebook/math';
   import { getMermaid, renderInto } from '../lib/notebook/mermaid';
   import { collectMathFonts } from '../lib/notebook/mathFonts';
+  import { MATH_STATIC_CSS } from '../lib/math/fonts';
   import { externalReferences, htmlExport, markdownExport, printDocument } from '../lib/notebook/export';
   import { addTags, exportFileName, removeTags } from '../lib/notebook/bulk';
   import { displayTitle, parseTags } from '../lib/notebook/model';
@@ -1594,10 +1595,12 @@
         await getMermaid();
         await renderInto(pres);
       }
-      const fonts = host.querySelector('.katex') ? await collectMathFonts(host) : [];
+      const fonts = host.querySelector('.ML__latex') ? await collectMathFonts(host) : [];
       let css = '';
       if (fonts.length > 0) {
-        css = await fetch(href('/math/katex.css')).then((r) => (r.ok ? r.text() : ''));
+        // MathLive's layout rules. Without them the exported file has the
+        // glyphs and none of the positioning, which is worse than plain text.
+        css = await fetch(href(MATH_STATIC_CSS)).then((r) => (r.ok ? r.text() : ''));
       }
       return { html: host.innerHTML, fonts, css };
     } finally {

@@ -2,22 +2,31 @@
  * notey service worker — full offline support.
  *
  * Ported from useful's worker, which encodes a fixed bug in nearly every
- * line (ignoreVary, activate-blocking, backtick imports, prefix-scoped
- * purge, non-Response rejection). Structure:
- *  - Install: cache only the app SHELL (pages + icons + typeface). Fast,
- *    small, never competing with the booting app for the host's rate limit.
- *  - Activate: purge old caches, claim clients, then crawl the
- *    fingerprinted _astro/ asset graph in the BACKGROUND — one file at a
- *    time, with a delay between each and a hard cap — so pages never
- *    visited still work offline.
+ * line (ignoreVary, activate-blocking, non-Response rejection). Structure:
+ *  - Install: cache the app SHELL (pages + icons + typeface) and nothing
+ *    else, so the worker installs in a moment and never competes with the
+ *    booting app.
+ *  - Activate: purge old caches, claim clients, then download EVERYTHING
+ *    the build emitted — every lazy chunk, the sqlite engine, every font —
+ *    from `precache.json`, flat out, in the background. One visit is all
+ *    it takes; after that the network is optional, including for pages and
+ *    features never opened.
  *  - Navigations (HTML): network-first (with retry); offline serves the
  *    cached copy (or the cached home page).
  *  - Assets: stale-while-revalidate; a miss goes to the network with retry.
+ *
+ * `precache.json` is written by tools/astro-precache.mjs at build time. The
+ * worker used to CRAWL instead — cache the shell, regex `_astro/…` out of
+ * it, follow what it found — because Astro emits no manifest. A regex over
+ * minified code is a guess, and a chunk it guessed wrong about was simply
+ * missing the first time someone opened that feature offline. The build
+ * knows the file list exactly, so it writes it down.
  */
 
-// Bump this on any meaningful change to this file: `activate` only purges
-// caches whose name differs.
-const CACHE_NAME = 'notey-cache-v2';
+// Only meaningful for the purge below: the worker keeps ONE app cache, and
+// a precache run deletes whatever the current build no longer lists (see
+// `prune`), so a stale entry cannot survive a deployment either way.
+const CACHE_NAME = 'notey-cache-v3';
 
 // Everything under this prefix belongs to this app. Cache Storage is keyed
 // by ORIGIN, not by service-worker scope; scoping deletion to the prefix
@@ -27,26 +36,33 @@ const CACHE_PREFIX = 'notey-cache-';
 // The worker is registered from `${base}/sw.js`, so its scope IS the Astro
 // base ('/' at the root, '/notey/' on GitHub Pages).
 const BASE = new URL(self.registration.scope).pathname; // always ends with '/'
-const ASSET_PREFIX = BASE + '_astro/';
-// A build asset is ONE path segment with an extension. Minified code is
-// full of strings that look like relative paths but are not files in this
-// build (Excalidraw alone contributes hundreds); anything with a slash
-// after the prefix, or no extension, is not ours.
-const ASSET_FILE = /^[^/]+\.[A-Za-z0-9]+$/;
+
+// The build's own list of everything it serves. Relative paths, so this
+// same file works wherever the app is mounted.
+const MANIFEST_URL = BASE + 'precache.json';
+
+// The worker's own note of what the last complete run cached, and what the
+// build BEFORE that one cached (see `prune`). A cache key only — nothing is
+// ever fetched from here.
+const STATE_URL = BASE + '__notey-precache-state';
+
 // One page: settings live inside the command palette, not on a route.
 const SHELL = ['', 'favicon.svg', 'favicon-maskable.svg', 'manifest.webmanifest'].map(
   (p) => BASE + p
 );
 
-// Stable vendored files fetched by name at run time (the _astro/ crawl can
-// never discover them): the KaTeX faces, the Excalidraw canvas faces, and
-// notey's own Courier Prime. Their bucket sits deliberately OUTSIDE
-// CACHE_PREFIX so a CACHE_NAME bump never re-downloads unchanged fonts.
-// Mirrored by FONT_CACHE in src/lib/math/fonts.ts.
+// Stable vendored files fetched by name at run time: the KaTeX faces
+// MathLive draws with, the Excalidraw canvas faces, and notey's own Courier
+// Prime. Their bucket sits deliberately OUTSIDE CACHE_PREFIX so a
+// CACHE_NAME bump never re-downloads unchanged fonts. Only the worker
+// reads it: the page asks the worker (see src/lib/offline.ts) rather than
+// opening caches of its own.
 const FONT_CACHE = 'notey-fonts-v1';
 const FONT_PREFIXES = [BASE + 'math/', BASE + 'excalidraw/', BASE + 'fonts/'];
+const isFontAsset = (path) => FONT_PREFIXES.some((prefix) => path.startsWith(prefix));
+
 // The typeface is part of the first paint, so it precaches at install
-// (into its own bucket) instead of waiting to be fetched once.
+// (into its own bucket) instead of waiting for the full run.
 const FONT_SHELL = [
   'fonts/fonts.css',
   'fonts/CourierPrime-Regular.woff2',
@@ -63,14 +79,11 @@ const MATCH_OPTS = { ignoreVary: true };
 // Navigations also ignore query strings: /?note=<x> is cached as /.
 const NAV_OPTS = { ignoreVary: true, ignoreSearch: true };
 
-// Background-warm pacing: gap between fetches and a ceiling on how many
-// the crawl will pull, so a large bundle can't hammer the host.
-const WARM_DELAY_MS = 120;
-const WARM_MAX_ASSETS = 600;
-
-// The crawl never follows wasm/data payloads (sqlite-wasm's engine is
-// referenced from its chunk); they cache on first use like any asset.
-const CRAWL_SKIP = /\.(wasm|data)$/;
+// How many precache fetches are in flight at once. There is deliberately no
+// delay between them and no ceiling on how many run: the whole point is that
+// the first visit pays for every later one. Six keeps a browser's connection
+// pool busy without burying the host.
+const PRECACHE_CONCURRENCY = 6;
 
 /** Transient failures worth retrying (throttles and gateway hiccups). */
 const RETRY_STATUS = new Set([429, 500, 502, 503, 504]);
@@ -138,91 +151,158 @@ async function precacheShell() {
 }
 
 /**
- * Crawl the cached HTML/JS/CSS for fingerprinted _astro/ assets (including
- * dynamically imported chunks) and cache them, slowly, after activation.
- * Never awaited by anything the app is waiting on.
+ * The build's file list, as absolute paths.
+ *
+ * Read past the HTTP cache (`reload`), or a deployment could stay invisible
+ * for as long as the previous manifest is fresh. The copy kept in the cache
+ * is the fallback for an offline status check — never for a download, which
+ * needs the network anyway.
  */
-async function warmAssetCache({ paced = true, onProgress } = {}) {
+async function loadManifest() {
   const cache = await caches.open(CACHE_NAME);
-  const seen = new Set(SHELL);
-  const queue = [...SHELL];
-  let fetched = 0;
+  try {
+    const response = await fetchWithRetry(new Request(MANIFEST_URL, { cache: 'reload' }));
+    if (response.ok) {
+      await cache.put(MANIFEST_URL, response.clone());
+      return readManifest(await response.json());
+    }
+  } catch {
+    // Offline. Fall through to whatever the last run wrote down.
+  }
+  const cached = await cache.match(MANIFEST_URL, MATCH_OPTS);
+  return readManifest(cached ? await cached.json() : null);
+}
 
-  while (queue.length > 0 && fetched < WARM_MAX_ASSETS) {
-    const url = queue.shift();
-    let response = await cache.match(url, MATCH_OPTS);
-    if (!response) {
-      // Pacing protects the host from a burst while the app is booting. A
-      // user who explicitly asked to download everything is waiting for
-      // it, so that run goes flat out.
-      if (paced) await sleep(WARM_DELAY_MS);
-      try {
-        response = await fetchWithRetry(url);
-      } catch {
-        continue; // genuinely offline; the next activation resumes the crawl
-      }
-      fetched++;
-      onProgress?.(fetched, queue.length);
-      if (!response.ok) continue; // never cache a non-ok response
-      await cache.put(url, response.clone());
-    }
-    const type = response.headers.get('content-type') || '';
-    if (!/html|javascript|css/.test(type)) continue;
-    const text = await response.clone().text();
-    const enqueue = (path) => {
-      if (
-        path.startsWith(ASSET_PREFIX) &&
-        ASSET_FILE.test(path.slice(ASSET_PREFIX.length)) &&
-        !seen.has(path) &&
-        !CRAWL_SKIP.test(path)
-      ) {
-        seen.add(path);
-        queue.push(path);
-      }
-    };
-    // Fingerprinted asset references, however the bundle spells them:
-    // "/_astro/x.js" (HTML), "/base/_astro/x.js", or bare "_astro/x.js"
-    // (Vite's __vite__mapDeps).
-    for (const match of text.matchAll(/_astro\/[A-Za-z0-9_.\-]+/g)) {
-      enqueue(BASE + match[0]);
-    }
-    // Relative specifiers — the bundler emits dynamic imports with
-    // BACKTICKS, e.g. import(`./chunk.js`), so all three quote styles count.
-    const from = new URL(url, self.location.origin);
-    for (const match of text.matchAll(/['"`](\.{1,2}\/[A-Za-z0-9_.\-/]+)['"`]/g)) {
-      try {
-        enqueue(new URL(match[1], from).pathname);
-      } catch {
-        // not a resolvable path — ignore
-      }
-    }
+/** `{ built, urls }` — which build this is, and every file in it. */
+function readManifest(manifest) {
+  const files = Array.isArray(manifest?.files) ? manifest.files : [];
+  return {
+    built: String(manifest?.built ?? ''),
+    urls: files.filter((f) => typeof f === 'string').map((f) => BASE + f),
+  };
+}
+
+async function readState(cache) {
+  try {
+    const response = await cache.match(STATE_URL);
+    return response ? await response.json() : null;
+  } catch {
+    return null;
   }
 }
 
-// Browsers terminate idle service workers, and a paced crawl spends most of
-// its time sleeping — so a warm run is regularly cut short. These live for
-// the lifetime of one worker instance: a restarted worker re-runs the
-// crawl, which skips everything already cached, and picks up where the
-// last run stopped. `activate` fires only once, so fetches re-kick it.
-let warmPromise = null;
-let warmDone = false;
+/** Which of `urls` are not in a cache yet, with the cache each belongs in. */
+async function missingFrom(urls, app, fonts) {
+  const missing = [];
+  for (const url of urls) {
+    const cache = isFontAsset(url) ? fonts : app;
+    if (!(await cache.match(url, MATCH_OPTS))) missing.push([url, cache]);
+  }
+  return missing;
+}
 
-function warmOnce() {
-  if (warmDone) return Promise.resolve();
-  if (!warmPromise) {
-    warmPromise = warmAssetCache()
-      .then(() => {
-        warmDone = true;
+/**
+ * Drop everything neither this build nor the one before it lists.
+ *
+ * This is what makes the single app cache safe: stale hashed chunks leave on
+ * their own, without the version-bump-by-hand step that only works when
+ * somebody remembers it.
+ *
+ * ONE previous build is kept, not zero. A tab opened before an update is
+ * still running the old build's code once this worker claims it, and the
+ * lazy chunks it has not loaded yet exist nowhere else — the host replaced
+ * them. Pruning them at once would break that tab's first diagram or drawing
+ * until a reload, offline or not. They go when the build after this one is
+ * cached, by which time nothing should still be running them.
+ */
+async function prune(cache, wanted) {
+  for (const request of await cache.keys()) {
+    if (!wanted.has(new URL(request.url).pathname)) await cache.delete(request);
+  }
+}
+
+/**
+ * Download the whole build.
+ *
+ * Returns true when every file is cached — only then is it safe to prune,
+ * because a half-finished run says nothing about what the build contains.
+ */
+async function precacheAll(onProgress) {
+  const { built, urls } = await loadManifest();
+  if (urls.length === 0) return false; // no manifest: never prune on a guess
+  const app = await caches.open(CACHE_NAME);
+  const fonts = await caches.open(FONT_CACHE);
+  const queue = await missingFrom(urls, app, fonts);
+  const total = queue.length;
+  let done = 0;
+  let failed = 0;
+  onProgress?.(done, total);
+
+  const worker = async () => {
+    for (let job = queue.shift(); job; job = queue.shift()) {
+      const [url, cache] = job;
+      try {
+        const response = await fetchWithRetry(url);
+        if (response.ok) await cache.put(url, response);
+        else failed++;
+      } catch {
+        failed++; // offline, or a file the host will not serve
+      }
+      onProgress?.(++done, total);
+    }
+  };
+  await Promise.all(
+    Array.from({ length: Math.min(PRECACHE_CONCURRENCY, Math.max(total, 1)) }, worker)
+  );
+
+  if (failed > 0) return false;
+  // The same build run again keeps the generation it already remembered; a
+  // new build demotes the one the state describes to "previous".
+  const state = await readState(app);
+  const previous = !state
+    ? []
+    : state.built === built
+      ? (state.previous ?? [])
+      : (state.urls ?? []);
+  await app.put(
+    STATE_URL,
+    new Response(JSON.stringify({ built, urls, previous }), {
+      headers: { 'content-type': 'application/json' },
+    })
+  );
+  const wanted = new Set([...urls, ...previous, MANIFEST_URL, STATE_URL]);
+  await prune(app, wanted);
+  await prune(fonts, wanted);
+  return true;
+}
+
+// Browsers terminate idle service workers, so a long download is regularly
+// cut short. These live for the lifetime of one worker instance: a restarted
+// worker runs again, skips everything already cached, and picks up where the
+// last run stopped. `activate` fires only once, so fetches re-kick it.
+let precachePromise = null;
+let precacheDone = false;
+
+function precacheOnce() {
+  if (precacheDone) return Promise.resolve();
+  if (!precachePromise) {
+    precachePromise = precacheAll()
+      .then((complete) => {
+        precacheDone = complete;
       })
       .catch(() => {})
       .finally(() => {
-        warmPromise = null;
+        precachePromise = null;
       });
   }
-  return warmPromise;
+  return precachePromise;
 }
 
 self.addEventListener('install', (event) => {
+  // The shell only. A download of the whole build belongs in `activate`'s
+  // background, not in front of the worker taking over: a worker is not
+  // "installed" until this settles, and an install the browser kills part
+  // way through has to start over.
   event.waitUntil(precacheShell().then(() => self.skipWaiting()));
 });
 
@@ -239,38 +319,68 @@ self.addEventListener('activate', (event) => {
       )
       .then(() => self.clients.claim())
       .then(() => {
-        // Warm in the background — NOT inside this waitUntil. A worker is
-        // "activating" until its activate promise settles, and the browser
-        // holds navigations and worker-script loads to an activating
-        // worker: with the crawl in here, every click on a fresh install
-        // hangs for as long as the crawl runs. The fetch handler's own
-        // waitUntil(warmOnce()) keeps the worker alive instead.
-        void warmOnce();
+        // Downloaded in the background — NOT inside this waitUntil. A worker
+        // is "activating" until its activate promise settles, and the
+        // browser holds navigations and worker-script loads to an activating
+        // worker: with the download in here, every click on a fresh install
+        // waits for the whole build. The fetch handler's own
+        // waitUntil(precacheOnce()) keeps the worker alive instead.
+        void precacheOnce();
       })
   );
 });
 
 /**
- * "Download everything for offline use". The app asks for the crawl
- * because only the worker can see the whole asset graph. Progress goes
- * back as messages.
+ * The offline-copy controls in Settings.
+ *
+ *   { type: 'notey-offline', action: 'status' }   → how much is missing
+ *   { type: 'notey-offline', action: 'download' } → fetch the rest now
+ *
+ * Only the worker can answer either: the page cannot see the manifest, and
+ * the caches it would have to count are the worker's.
  */
 self.addEventListener('message', (event) => {
   const data = event.data;
-  if (!data || data.type !== 'notey-warm') return;
+  if (!data || data.type !== 'notey-offline') return;
   const source = event.source;
   const reply = (message) => source?.postMessage?.(message);
   event.waitUntil(
     (async () => {
       try {
-        await warmAssetCache({
-          paced: false,
-          onProgress: (fetched) => reply({ type: 'notey-warm-progress', fetched }),
-        });
-        warmDone = true;
-        reply({ type: 'notey-warm-done' });
+        if (data.action === 'status') {
+          const { urls } = await loadManifest();
+          const missing = await missingFrom(
+            urls,
+            await caches.open(CACHE_NAME),
+            await caches.open(FONT_CACHE)
+          );
+          reply({
+            type: 'notey-offline-status',
+            ready: urls.length > 0 && missing.length === 0,
+            missing: missing.length,
+            total: urls.length,
+          });
+          // Asking is also a nudge. A run that ended short (a host that ran
+          // out of sockets, a worker the browser stopped, a file evicted
+          // since) is otherwise resumed only by the next fetch — and a page
+          // sitting on Settings makes none, so the answer would say "25 still
+          // to download" for ever. The count just taken is proof enough that
+          // "done" is out of date, whatever this worker last believed.
+          if (urls.length > 0 && missing.length > 0) {
+            precacheDone = false;
+            await precacheOnce();
+          }
+          return;
+        }
+        if (data.action === 'download') {
+          const complete = await precacheAll((done, total) =>
+            reply({ type: 'notey-offline-progress', done, total })
+          );
+          precacheDone = complete;
+          reply({ type: 'notey-offline-done', complete });
+        }
       } catch (err) {
-        reply({ type: 'notey-warm-error', error: String(err) });
+        reply({ type: 'notey-offline-error', error: String(err) });
       }
     })()
   );
@@ -282,10 +392,10 @@ self.addEventListener('fetch', (event) => {
   const url = new URL(request.url);
   if (url.origin !== self.location.origin) return;
 
-  // Resume an interrupted warm. Cheap once it has finished, and the
+  // Resume an interrupted download. Cheap once it has finished, and the
   // in-flight request keeps the worker alive long enough to make more
   // progress across normal use.
-  event.waitUntil(warmOnce());
+  event.waitUntil(precacheOnce());
 
   if (request.mode === 'navigate') {
     // Network-first: fresh page when online, cached page offline. The
@@ -314,7 +424,7 @@ self.addEventListener('fetch', (event) => {
 
   // Cache-first with no revalidation: vendored files are replaced by a
   // re-vendor under a new name, never edited in place.
-  if (FONT_PREFIXES.some((prefix) => url.pathname.startsWith(prefix))) {
+  if (isFontAsset(url.pathname)) {
     event.respondWith(
       (async () => {
         const cache = await caches.open(FONT_CACHE);
