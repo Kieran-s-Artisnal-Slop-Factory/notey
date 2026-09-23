@@ -24,6 +24,14 @@
     type Prefs,
     type StartupMode,
   } from '../lib/prefs';
+  import {
+    DEFAULT_SHORTCUTS,
+    TOOLS,
+    bindOf,
+    bindRefusal,
+    type Shortcuts,
+    type ToolId,
+  } from '../lib/notebook/shortcuts';
   import { requestPersistentStorage, storageEstimate, type PersistState } from '../lib/persistence';
   import {
     describeOffline,
@@ -44,9 +52,12 @@
 
   let {
     onChooseFolder = undefined,
+    onShortcuts = undefined,
   }: {
     /** Desktop only: pick the folder the vault lives in. */
     onChooseFolder?: (() => Promise<string | null>) | undefined;
+    /** A tool's shortcut changed; the app holds the live set. */
+    onShortcuts?: ((next: Shortcuts) => void) | undefined;
   } = $props();
 
   let prefs = $state<Prefs>(loadPrefs());
@@ -58,6 +69,10 @@
   let offline = $state<OfflineStatus | null>(null);
   /** Files fetched so far in a download the panel asked for. */
   let offlineProgress = $state<{ done: number; total: number } | null>(null);
+  /** The tool whose shortcut is waiting for a keypress, or null. */
+  let capturing = $state<ToolId | null>(null);
+  /** What the last rebinding did, or why it was refused. */
+  let shortcutNote = $state<string | null>(null);
   /** What the last export or import did, in one line, or what went wrong. */
   let transferNote = $state<string | null>(null);
   let transferring = $state(false);
@@ -119,6 +134,51 @@
     } finally {
       offlineProgress = null;
     }
+  }
+
+  /**
+   * Take the next keypress as this tool's shortcut.
+   *
+   * The listener is on the CAPTURE phase of the window, which is what keeps
+   * the keystroke away from everything else while this is waiting: Escape
+   * would otherwise walk the palette back a level, and Alt+F would open the
+   * formula editor rather than being recorded as the key that opens it.
+   */
+  $effect(() => {
+    const tool = capturing;
+    if (!tool) return;
+    const onKey = (event: KeyboardEvent) => {
+      event.preventDefault();
+      event.stopPropagation();
+      if (event.key === 'Escape') {
+        capturing = null;
+        return;
+      }
+      const bind = bindOf(event);
+      // A modifier on its own is somebody still reaching for the key.
+      if (!bind) return;
+      const refusal = bindRefusal(bind, tool, prefs.shortcuts);
+      if (refusal) {
+        shortcutNote = refusal;
+        return;
+      }
+      const next: Shortcuts = { ...prefs.shortcuts, [tool]: bind };
+      update({ shortcuts: next });
+      onShortcuts?.(next);
+      shortcutNote = `${labelOf(tool)} opens with ${bind}.`;
+      capturing = null;
+    };
+    window.addEventListener('keydown', onKey, true);
+    return () => window.removeEventListener('keydown', onKey, true);
+  });
+
+  const labelOf = (tool: ToolId) => TOOLS.find((t) => t.id === tool)?.label ?? tool;
+
+  function resetShortcuts(): void {
+    capturing = null;
+    update({ shortcuts: { ...DEFAULT_SHORTCUTS } });
+    onShortcuts?.({ ...DEFAULT_SHORTCUTS });
+    shortcutNote = 'Back to the keys notey ships with.';
   }
 
   /**
@@ -383,6 +443,40 @@
   </section>
 
   <section>
+    <p class="eyebrow">Editor shortcuts</p>
+    <div class="binds">
+      {#each TOOLS as tool (tool.id)}
+        <div class="bind">
+          <span class="bind-label"><span aria-hidden="true">{tool.glyph}</span> {tool.label}</span>
+          <kbd data-testid={`notey-shortcut-${tool.id}`}>
+            {prefs.shortcuts[tool.id] || 'none'}
+          </kbd>
+          <button
+            class="btn btn-sm"
+            data-testid={`notey-shortcut-change-${tool.id}`}
+            aria-label={`Change the shortcut for ${tool.label}`}
+            onclick={() => {
+              shortcutNote = null;
+              capturing = capturing === tool.id ? null : tool.id;
+            }}
+          >
+            {capturing === tool.id ? 'Press keys…' : 'Change'}
+          </button>
+        </div>
+      {/each}
+    </div>
+    <div class="row">
+      <button class="btn btn-sm" data-testid="notey-shortcuts-reset" onclick={resetShortcuts}>
+        Reset to defaults
+      </button>
+      <span class="muted">Escape stops waiting for a key.</span>
+    </div>
+    {#if shortcutNote}
+      <p class="line" role="status" data-testid="notey-shortcut-note">{shortcutNote}</p>
+    {/if}
+  </section>
+
+  <section>
     <p class="eyebrow">Your vault</p>
     <p class="line">
       <strong data-testid="notey-backend">{backend}</strong>
@@ -547,6 +641,34 @@
     display: flex;
     flex-wrap: wrap;
     gap: var(--space-2);
+  }
+
+  .binds {
+    display: flex;
+    flex-direction: column;
+    gap: var(--space-1);
+  }
+
+  .bind {
+    display: flex;
+    align-items: center;
+    gap: var(--space-2);
+  }
+
+  .bind-label {
+    flex: 1 1 auto;
+    font-size: var(--font-size-sm);
+  }
+
+  .bind kbd {
+    min-width: 5.5rem;
+    text-align: center;
+    font-family: var(--font-mono);
+    font-size: var(--font-size-sm);
+    padding: 2px var(--space-2);
+    border: 1px solid var(--border-strong-color);
+    border-radius: var(--radius-sm);
+    background: var(--surface-color);
   }
 
   .choice {

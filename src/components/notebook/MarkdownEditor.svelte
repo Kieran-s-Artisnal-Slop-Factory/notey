@@ -14,6 +14,8 @@
    * write the formula, not the LaTeX), **Diagram** (mermaid, with templates,
    * completions and a live preview), **Draw** (Excalidraw, saved as a PNG
    * with the scene embedded, so it reopens for editing) and **Footnotes**.
+   * Each has a shortcut the app can reconfigure and `openTool` opens any of
+   * them from outside — which is how the command palette reaches them.
    *
    * Footnotes are GFM (`text[^ada]` + `[^ada]: the note`). Milkdown parses
    * them but has no schema node for definitions, so a WYSIWYG round-trip
@@ -92,12 +94,18 @@
     type MathTarget,
   } from '../../lib/notebook/mathNode';
   import { mathAt, mathMarkdown, unescapeDollars } from '../../lib/notebook/mathText';
+  import {
+    DEFAULT_SHORTCUTS,
+    TOOLS,
+    toolFor,
+    type Shortcuts,
+    type ToolId,
+  } from '../../lib/notebook/shortcuts';
   import MarkdownPreview from './MarkdownPreview.svelte';
   import MathDialog from './MathDialog.svelte';
   import DiagramDialog from './DiagramDialog.svelte';
   import DrawingDialog from './DrawingDialog.svelte';
   import FootnoteDialog, {
-    isFootnoteKey,
     type FootnoteRow,
     type FootnoteSaveOptions,
   } from './FootnoteDialog.svelte';
@@ -179,6 +187,8 @@
     onWikiNavigate = undefined,
     /** The view changed, by button or `setMode`. */
     onMode = undefined,
+    /** Which key opens which tool. Settings can change these. */
+    shortcuts = DEFAULT_SHORTCUTS,
   }: {
     value?: string;
     onChange: (md: string) => void;
@@ -191,6 +201,7 @@
     wikiHref?: ((title: string) => string) | undefined;
     onWikiNavigate?: ((title: string) => void) | undefined;
     onMode?: ((mode: Mode) => void) | undefined;
+    shortcuts?: Shortcuts;
   } = $props();
 
   let mode = $state<Mode>(initialMode);
@@ -947,6 +958,12 @@
    */
   function toggleFootnotes() {
     if (mode === 'preview') return;
+    // Everything below rebuilds the document from `current`, and in the
+    // canvas `current` lags by Milkdown's own ~200 ms — so a note typed and
+    // footnoted in one movement was rebuilt from the markdown as it stood
+    // BEFORE the sentence, and the sentence went with it. Read the canvas
+    // back first; `syncFromCanvas` is the same thing `flush` does.
+    syncFromCanvas();
     const existing = footnoteAtCursor();
     if (existing) {
       footnoteFocus = existing;
@@ -1017,6 +1034,9 @@
     footnoteFocus = undefined;
     const kept = new Set(rows.map((row) => row.original).filter((label) => label !== null));
 
+    // Same reason as in `toggleFootnotes`: this rewrites the whole document
+    // from `current`, so `current` has to BE the document first.
+    syncFromCanvas();
     let md = current;
     // Citations live in the prose, so touching one means the canvas has to be
     // told; a note's own text never appears there.
@@ -1418,19 +1438,45 @@
     else if (initialMode === 'source') mountCodeMirror();
   });
 
+  /** `Insert a formula (Alt+F)` — the button's tooltip, shortcut and all. */
+  const withKey = (id: ToolId, title: string) =>
+    shortcuts[id] ? `${title} (${shortcuts[id]})` : title;
+
   /**
-   * Alt+0 is claimed on the CAPTURE phase of the editor root, not with an
-   * onkeydown on the element. A real keypress inside the ProseMirror canvas
-   * never reached that handler — the editors consume Alt-combinations on the
-   * way up (a synthetic event still arrived, which is what made this look
-   * like it worked). Capture runs before either editor sees the key, which
-   * is the right place for a shortcut this component owns anyway.
+   * Open a tool from anywhere: the toolbar, a shortcut, or the command
+   * palette through the parent's `openTool`.
+   *
+   * Preview has no editor to insert into, and the toolbar buttons are
+   * disabled there for the same reason.
+   */
+  export function openTool(tool: ToolId): void {
+    if (mode === 'preview') return;
+    if (tool === 'formula') openMath();
+    else if (tool === 'diagram') openDiagram();
+    else if (tool === 'drawing') void openDrawing();
+    else toggleFootnotes();
+  }
+
+  /**
+   * The tool shortcuts are claimed on the CAPTURE phase of the editor root,
+   * not with an onkeydown on the element. A real keypress inside the
+   * ProseMirror canvas never reached that handler — the editors consume
+   * Alt-combinations on the way up (a synthetic event still arrived, which
+   * is what made this look like it worked). Capture runs before either
+   * editor sees the key, which is the right place for a shortcut this
+   * component owns anyway.
+   *
+   * A dialog that is already open keeps its own keys: the footnote dialog
+   * closes on the same shortcut that opened it, and the others would
+   * otherwise reopen on top of themselves.
    */
   function onRootKeydown(event: KeyboardEvent): void {
-    if (footnotesOpen || !isFootnoteKey(event)) return;
+    if (footnotesOpen || diagram || math || drawing !== undefined) return;
+    const tool = toolFor(event, shortcuts);
+    if (!tool) return;
     event.preventDefault();
     event.stopPropagation();
-    toggleFootnotes();
+    openTool(tool);
   }
 
   onMount(() => {
@@ -1455,7 +1501,7 @@
       type="button"
       class="tool"
       data-testid="notebook-toolbar-math"
-      title="Write a formula — visually, not as LaTeX; double-click one to edit it"
+      title={withKey('formula', 'Write a formula — visually, not as LaTeX; double-click one to edit it')}
       disabled={mode === 'preview'}
       onclick={openMath}
     >
@@ -1465,7 +1511,7 @@
       type="button"
       class="tool"
       data-testid="notebook-toolbar-diagram"
-      title="Insert or edit a mermaid diagram"
+      title={withKey('diagram', 'Insert or edit a mermaid diagram')}
       disabled={mode === 'preview'}
       onclick={openDiagram}
     >
@@ -1475,7 +1521,7 @@
       type="button"
       class="tool"
       data-testid="notebook-toolbar-draw"
-      title="Draw — an Excalidraw canvas; select an existing drawing first to edit it"
+      title={withKey('drawing', 'Draw — an Excalidraw canvas; select an existing drawing first to edit it')}
       disabled={mode === 'preview'}
       onclick={openDrawing}
     >
@@ -1485,7 +1531,7 @@
       type="button"
       class="tool"
       data-testid="notebook-toolbar-footnotes"
-      title="Footnotes — write, retitle and remove the notes at the foot of the document (Alt+0)"
+      title={withKey('footnotes', 'Footnotes — write, retitle and remove the notes at the foot of the document')}
       disabled={mode === 'preview'}
       onclick={() => (footnotesOpen = true)}
     >
@@ -1590,6 +1636,7 @@
 
 {#if footnotesOpen}
   <FootnoteDialog
+    closeKey={shortcuts.footnotes}
     notes={footnoteNotes}
     focusLabel={footnoteFocus}
     onSave={saveFootnotes}

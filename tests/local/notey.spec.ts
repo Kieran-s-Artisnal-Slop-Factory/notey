@@ -849,6 +849,74 @@ test.describe('editor', () => {
     await expect(canvas).toContainText('It cost $5 and $10.');
   });
 
+  test('every tool on the toolbar has a key, and none of them types', async ({ app }) => {
+    test.slow();
+    await openApp(app);
+    await newNote(app.page);
+    await setTitle(app.page, 'Keys');
+    await typeInCanvas(app.page, 'Before.');
+    const canvas = app.page.locator('[data-testid="notebook-canvas"] [contenteditable="true"]');
+
+    // Alt+F, and NOT an "f" in the note: the shortcut is claimed on the
+    // editor root's capture phase, before either editor sees the key.
+    await app.page.keyboard.press('Alt+KeyF');
+    await expect(app.page.getByTestId('notebook-math-dialog')).toBeVisible({ timeout: 30_000 });
+    await app.page.getByTestId('notebook-math-cancel').click();
+    await expect(app.page.getByTestId('notebook-math-dialog')).toHaveCount(0);
+    await expect(canvas).toHaveText('Before.');
+
+    await canvas.click();
+    await app.page.keyboard.press('Alt+KeyM');
+    await expect(app.page.getByTestId('notebook-diagram-dialog')).toBeVisible({ timeout: 30_000 });
+    await app.page.getByTestId('notebook-diagram-cancel').click();
+
+    await canvas.click();
+    await app.page.keyboard.press('Alt+KeyE');
+    await expect(app.page.getByTestId('notebook-drawing-dialog')).toBeVisible({ timeout: 30_000 });
+    await app.page.getByRole('button', { name: 'Close' }).first().click();
+    await expect(app.page.getByTestId('notebook-drawing-dialog')).toHaveCount(0);
+
+    // Alt+0 opens the footnotes and closes them again: it is a toggle, and
+    // the dialog closes on whichever key opened it.
+    await canvas.click();
+    await app.page.keyboard.press('Alt+Digit0');
+    await expect(app.page.getByTestId('notebook-footnote-dialog')).toBeVisible({ timeout: 15_000 });
+    await app.page.keyboard.press('Alt+Digit0');
+    await expect(app.page.getByTestId('notebook-footnote-dialog')).toHaveCount(0);
+
+    // The prose is untouched by all of that; the citation Alt+0 left behind
+    // is a second editable node, hence .first().
+    await expect(canvas.first()).toContainText('Before.');
+  });
+
+  test('the palette opens the same four tools, and says which key does', async ({ app }) => {
+    await openApp(app);
+    await newNote(app.page);
+    await setTitle(app.page, 'Palette tools');
+    await openPalette(app.page);
+    // Each row carries its shortcut, so the palette is where you learn them.
+    await expect(item(app.page, 'Insert a formula')).toContainText('Alt+F');
+    await expect(item(app.page, 'Insert a diagram')).toContainText('Alt+M');
+    await expect(item(app.page, 'Insert a drawing')).toContainText('Alt+E');
+    await expect(item(app.page, 'Insert a footnote')).toContainText('Alt+0');
+
+    await item(app.page, 'Insert a formula').click();
+    // The palette closes first: the dialogs take the keyboard, and it would
+    // otherwise be sitting over the top of them.
+    await expect(app.page.getByTestId('notey-palette')).toHaveCount(0);
+    await expect(app.page.getByTestId('notebook-math-dialog')).toBeVisible({ timeout: 30_000 });
+  });
+
+  test('there is nothing to insert into in the preview face', async ({ app }) => {
+    await openApp(app);
+    await newNote(app.page);
+    await setTitle(app.page, 'Reading');
+    await app.page.getByTestId('notebook-mode-preview').click();
+    await openPalette(app.page);
+    await expect(item(app.page, 'Insert a formula')).toHaveCount(0);
+    await expect(item(app.page, 'Insert a footnote')).toHaveCount(0);
+  });
+
   test('a formula is written in the formula editor, not in LaTeX', async ({ app }) => {
     await openApp(app);
     await newNote(app.page);
@@ -1500,6 +1568,55 @@ test.describe('preferences', () => {
       timeout: 30_000,
     });
     expect((await app.read('Safe.md'))?.content).toBe('Still here.');
+  });
+
+  test('a tool shortcut can be changed, and the new key opens it at once', async ({ app }) => {
+    test.slow();
+    await openApp(app);
+    await newNote(app.page);
+    await setTitle(app.page, 'Rebound');
+    await runCommand(app.page, 'Settings');
+    await expect(app.page.getByTestId('notey-shortcut-formula')).toHaveText('Alt+F');
+
+    await app.page.getByTestId('notey-shortcut-change-formula').click();
+    await expect(app.page.getByTestId('notey-shortcut-change-formula')).toHaveText('Press keys…');
+    await app.page.keyboard.press('Alt+KeyQ');
+    await expect(app.page.getByTestId('notey-shortcut-formula')).toHaveText('Alt+Q');
+    await expect(app.page.getByTestId('notey-shortcut-note')).toContainText('Alt+Q');
+
+    // Back to the note: the new key works without a reload, and the old one
+    // is nobody's.
+    await app.page.keyboard.press('Escape');
+    await app.page.keyboard.press('Escape');
+    const canvas = app.page.locator('[data-testid="notebook-canvas"] [contenteditable="true"]');
+    await canvas.click();
+    await app.page.keyboard.press('Alt+KeyF');
+    await expect(app.page.getByTestId('notebook-math-dialog')).toHaveCount(0);
+    await app.page.keyboard.press('Alt+KeyQ');
+    await expect(app.page.getByTestId('notebook-math-dialog')).toBeVisible({ timeout: 30_000 });
+  });
+
+  test('a key another tool already has is refused, and does not fire it', async ({ app }) => {
+    await openApp(app);
+    await runCommand(app.page, 'Settings');
+    await app.page.getByTestId('notey-shortcut-change-formula').click();
+    await app.page.keyboard.press('Alt+KeyM');
+
+    await expect(app.page.getByTestId('notey-shortcut-note')).toHaveText(
+      'Alt+M already opens diagram.'
+    );
+    await expect(app.page.getByTestId('notey-shortcut-formula')).toHaveText('Alt+F');
+    // The keypress was swallowed while Settings was waiting for it, so it
+    // did not open the diagram it is bound to either.
+    await expect(app.page.getByTestId('notebook-diagram-dialog')).toHaveCount(0);
+
+    // Escape stops waiting without walking the palette back a level.
+    await app.page.keyboard.press('Escape');
+    await expect(app.page.getByTestId('notey-shortcut-change-formula')).toHaveText('Change');
+    await expect(app.page.getByTestId('notey-settings')).toBeVisible();
+
+    await app.page.getByTestId('notey-shortcuts-reset').click();
+    await expect(app.page.getByTestId('notey-shortcut-formula')).toHaveText('Alt+F');
   });
 
   test('settings live in the palette and name the storage backend', async ({ app }) => {

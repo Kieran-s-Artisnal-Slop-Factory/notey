@@ -36,17 +36,6 @@
     returnTo: string | null;
   }
 
-  /**
-   * **Alt+0** — the one key for "the other half of this".
-   *
-   * Matched on the physical key so a layout that puts something else on
-   * Alt+0 (macOS gives `º`) still works, with the printable digit as a
-   * fallback for layouts that report neither.
-   */
-  export function isFootnoteKey(event: KeyboardEvent): boolean {
-    if (!event.altKey || event.ctrlKey || event.metaKey) return false;
-    return event.code === 'Digit0' || event.code === 'Numpad0' || event.key === '0';
-  }
 </script>
 
 <script lang="ts">
@@ -67,18 +56,22 @@
    */
   import { onMount } from 'svelte';
   import { slugifyLabel } from '../../lib/notebook/footnotes';
+  import { DEFAULT_SHORTCUTS, matches } from '../../lib/notebook/shortcuts';
 
   let {
     notes,
-    /** Open with this note's text under the caret — how Alt+0 arrives. */
+    /** Open with this note's text under the caret — how the shortcut arrives. */
     focusLabel = undefined,
     onSave,
     onCancel,
+    /** The shortcut that opened this, which also closes it. */
+    closeKey = DEFAULT_SHORTCUTS.footnotes,
   }: {
     notes: FootnoteSeed[];
     focusLabel?: string;
     onSave: (rows: FootnoteRow[], options: FootnoteSaveOptions) => void;
     onCancel: () => void;
+    closeKey?: string;
   } = $props();
 
   let nextId = notes.length;
@@ -215,9 +208,10 @@
       save();
       return;
     }
-    // The key that opened this closes it again. In a note, it hands you back
+    // The key that opened this closes it again — whichever key that is, so
+    // a rebound shortcut still works both ways. In a note, it hands you back
     // to where that note is cited; anywhere else it just puts the list away.
-    if (isFootnoteKey(event)) {
+    if (matches(event, closeKey)) {
       event.preventDefault();
       const row = activeRow();
       save(row ? trimmed(row) : null);

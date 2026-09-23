@@ -4,6 +4,11 @@
  * you like, what was open here, what your desk looks like), not vault data,
  * so they stay out of the vault and out of exports.
  */
+import {
+  DEFAULT_SHORTCUTS,
+  readShortcuts,
+  type Shortcuts,
+} from './notebook/shortcuts';
 
 export type EditorMode = 'wysiwyg' | 'source' | 'preview';
 export type StartupMode = 'last' | 'blank';
@@ -116,6 +121,12 @@ export const DESKS: readonly DeskOption[] = [
 ];
 
 export interface Prefs {
+  /**
+   * Which key opens each of the editor's four tools. Stored as written
+   * binds (`Alt+F`); `readShortcuts` is what makes a hand-edited or stale
+   * value safe. See notebook/shortcuts.ts.
+   */
+  shortcuts: Shortcuts;
   /** Open to the last note, or to a blank unfiled document. */
   startup: StartupMode;
   /** The editor face you left the editor in. */
@@ -140,6 +151,7 @@ export interface Prefs {
 }
 
 const DEFAULTS: Prefs = {
+  shortcuts: DEFAULT_SHORTCUTS,
   // Blank by default: notey opens as a page you can write on, not as a
   // file manager. The last note is one Ctrl+K away.
   startup: 'blank',
@@ -193,6 +205,7 @@ export function loadPrefs(): Prefs {
       accent: isAccent(parsed.accent) ? parsed.accent : 'ink',
       rule: parsed.rule !== false,
       vaultRoot: typeof parsed.vaultRoot === 'string' ? parsed.vaultRoot : null,
+      shortcuts: readShortcuts(parsed.shortcuts),
     };
   } catch {
     return { ...DEFAULTS };

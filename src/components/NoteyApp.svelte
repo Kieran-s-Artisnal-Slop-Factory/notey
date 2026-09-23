@@ -77,6 +77,7 @@
     type EditorMode,
     type ScratchScope,
   } from '../lib/prefs';
+  import type { Shortcuts } from '../lib/notebook/shortcuts';
 
   /*
    * Long enough that ordinary typing is one write rather than twenty. The
@@ -132,6 +133,12 @@
 
   /* ── chrome (what little there is) ─────────────────────────────────── */
   let mode = $state<EditorMode>(bootPrefs.mode);
+  /**
+   * Which key opens which editor tool. Held here rather than read in the
+   * editor so that changing one in Settings takes effect at once, in the
+   * editor and in the palette's hints alike, without a reload.
+   */
+  let shortcuts = $state<Shortcuts>(bootPrefs.shortcuts);
   let paletteOpen = $state(false);
   /** Which view the palette should open on, when it is not the root. */
   let paletteAt = $state<string | null>(null);
@@ -2155,6 +2162,7 @@
             onWikiNavigate={navigateWiki}
             placeholder="Press Ctrl+K for commands, or just start typing (/ for special blocks)."
             minHeight="20rem"
+            {shortcuts}
           />
         {/key}
         {/if}
@@ -2198,6 +2206,9 @@
       onBulk={runBulk}
       {heldPaths}
       readOnly={lockedElsewhere}
+      {shortcuts}
+      onShortcuts={(next) => (shortcuts = next)}
+      onInsert={mode === 'preview' ? undefined : (tool) => editor?.openTool(tool)}
       {desktop}
       onEditExisting={desktop ? () => void editExistingFile() : undefined}
       onChooseFolder={desktop ? chooseFolder : undefined}

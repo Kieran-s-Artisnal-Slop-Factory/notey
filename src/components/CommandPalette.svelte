@@ -20,6 +20,12 @@
   import { parseQuery, searchNotes } from '../lib/vault/search';
   import { nameOf } from '../lib/vault/model';
   import type { FolderEntry, Note } from '../lib/vault/types';
+  import {
+    DEFAULT_SHORTCUTS,
+    TOOLS,
+    type Shortcuts,
+    type ToolId,
+  } from '../lib/notebook/shortcuts';
 
   type View =
     | 'root'
@@ -51,6 +57,9 @@
     onClose,
     heldPaths = new Set<string>(),
     readOnly = false,
+    shortcuts = DEFAULT_SHORTCUTS,
+    onInsert = undefined,
+    onShortcuts = undefined,
     desktop = false,
     onEditExisting = undefined,
     onChooseFolder = undefined,
@@ -79,6 +88,15 @@
     heldPaths?: ReadonlySet<string>;
     /** The open note is being written in another tab. */
     readOnly?: boolean;
+    /** Which key opens which editor tool; shown beside the insert commands. */
+    shortcuts?: Shortcuts;
+    /**
+     * Open one of the editor's tools. Undefined when there is nothing to
+     * insert into — the preview face — and the commands are left out.
+     */
+    onInsert?: ((tool: ToolId) => void) | undefined;
+    /** Settings rebound a tool's shortcut. */
+    onShortcuts?: ((next: Shortcuts) => void) | undefined;
     /**
      * Running as the desktop app, which can reach files a browser cannot.
      */
@@ -211,6 +229,23 @@
         },
       },
     ];
+    // The toolbar, reachable from here — the same four tools, in the same
+    // order, each showing the key that opens it without the palette.
+    if (onInsert) {
+      for (const tool of TOOLS) {
+        list.push({
+          id: 'cmd:insert:' + tool.id,
+          label: tool.command,
+          hint: shortcuts[tool.id] ? `${shortcuts[tool.id]} · ${tool.hint}` : tool.hint,
+          run: () => {
+            // Close first: the dialogs take the keyboard, and the palette
+            // would still be over the top of them.
+            close();
+            onInsert(tool.id);
+          },
+        });
+      }
+    }
     if (scratchOpen && scratchDirty) {
       list.push({
         id: 'cmd:file',
@@ -649,7 +684,7 @@
           : 'Enter adds the tags to the ticked notes; Shift+Enter removes them.'}
       </p>
     {:else if view === 'settings'}
-      <SettingsPanel {onChooseFolder} />
+      <SettingsPanel {onChooseFolder} {onShortcuts} />
     {:else}
       <ul class="results" bind:this={listEl}>
         {#each items as item (item.id)}
