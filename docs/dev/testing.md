@@ -29,13 +29,14 @@ npm run test:unit   # vitest run
 npm test            # playwright test (builds first)
 ```
 
-## The unit suite — 393 cases in 25 files
+## The unit suite — 417 cases in 26 files
 
 | File | Cases | Covers |
 | --- | --- | --- |
 | `notebook/footnotes.test.ts` | 95 | The offset-preserving footnote model: find, insert, rename, remove, markers, `restoreDefinitions`, code masking |
 | `markdown.test.ts` | 30 | The render pipeline: wiki links, footnote numbering, maths rules (`$5 and $10` stays prose), mermaid fences, sanitisation |
 | `notebook/wiki.test.ts` | 22 | Link parsing with offsets, escaping, unicode, alias resolution, rewriting, backlinks |
+| `notebook/shortcuts.test.ts` | 24 | **The editor's keys**: matching on the physical code rather than the character macOS produces under Option, the numeric keypad, extra modifiers not counting, a bind needing Ctrl/Alt/Cmd, which tool a press opens, refusing a key another tool or the palette has, and reading a stored set that has gone stale |
 | `notebook/mathText.test.ts` | 22 | **Maths in source text**: finding the formula the cursor is in (inline, `$$` on one line or several, ` ```math `), prices never paired across a line, `looksLikeMath` telling money from maths, `unescapeDollars` repairing prose and leaving code alone, writing a formula back |
 | `notebook/export.test.ts` | 16 | H1 prepending, asset inlining, the self-contained HTML document, hostile titles, `externalReferences` |
 | `encode/base64.test.ts` | 16 | RFC 4648 vectors, UTF-8, URL-safe alphabet, data URLs |
@@ -59,7 +60,7 @@ npm test            # playwright test (builds first)
 | `vault/memoryStore.test.ts` | 6 | **The `VaultStore` contract**: implicit parents, `loadAll` omitting asset bytes, `create` refusing what `write` accepts, subtree rename and clash refusal, subtree delete, meta |
 | `notebook/drawing.test.ts` | 5 | The `.excalidraw.png` convention and the vendored font list |
 
-## The browser suite — 68 cases
+## The browser suite — 74 cases
 
 The fixture gives every test a **fresh browser context** (fresh OPFS, fresh
 worker), installs `localStorage['notey-test-mode'] = '1'` with an init script
@@ -85,7 +86,7 @@ genuinely shares them.
 | vault | A note survives a full reload; the file on disk is markdown with a frontmatter block |
 | linking | A missing link is listed, creates the note under its own name, and then backlinks; a rename pushes an alias, offers the rewrite with a count, and moves the file; `?note=` opens a note and offers Create for one that does not exist — without creating it |
 | organizing | Moving a note moves the file; deleting a notebook moves its notes up; deleting the note you have open leaves the blank page behind; bulk tag then delete touches only ticked rows; bulk move lands them in the notebook |
-| editor | Alt+0 cites at the cursor and files the definition; a mermaid fence renders; maths render through MathLive in Preview and in the canvas while `$5 and $10` stays prose in both; typing "pi" in the formula editor gives π and saves `$\pi$`; double-clicking a formula edits that one in place instead of appending another; in Source view the button opens on the `$$` block the cursor is in; a `$` typed in the canvas is saved without a backslash; the face is remembered across a reload; the drawing canvas takes the keyboard so its tool shortcuts do not type into the note, and Escape stays the canvas's; a drag out of the canvas does not dismiss it |
+| editor | Every tool opens from its key without typing into the note, from the palette, and from its button, which wears the key; the four insert commands are absent in Preview; a citation lands after a selected sentence rather than replacing it; Alt+0 cites at the cursor and files the definition; a mermaid fence renders; maths render through MathLive in Preview and in the canvas while `$5 and $10` stays prose in both; typing "pi" in the formula editor gives π and saves `$\pi$`; double-clicking a formula edits that one in place instead of appending another; in Source view the button opens on the `$$` block the cursor is in; a `$` typed in the canvas is saved without a backslash; the face is remembered across a reload; the drawing canvas takes the keyboard so its tool shortcuts do not type into the note, and Escape stays the canvas's; a drag out of the canvas does not dismiss it |
 | offline | One visit downloads the whole build — several hundred files, none missing, all in Cache Storage — and Settings, opened with three files gone missing, fetches them again and
 keeps its line current until it says it is ready; after an update the previous build's files stay for tabs still running it, and the build before that is pruned |
 | exports | The HTML file is self-contained (no script, no link, no external URL beyond XML namespaces, MathLive markup, fonts embedded); Markdown carries the title as an H1; a bulk export is one zip with both files |
@@ -93,7 +94,7 @@ keeps its line current until it says it is ready; after an update the previous b
 | dropping a file | A dropped `.md` becomes a note and opens, keeping the frontmatter it arrived with; dropping while another note is open loses nothing from it; a name already taken is filed alongside; a file dropped while in a notebook lands in that notebook; something that is not markdown is refused out loud; and the browser build offers no "Edit existing file", which only the desktop can do |
 | frontmatter | Aliases are a field a rename fills in; a field can be a value, a list or YAML; a hand-written nested map survives an unrelated edit |
 | two tabs | Two tabs booting at once settle into exactly one owner and one follower; two tabs write two different notes and both persist, and the first lists the second's note without a reload; the same note in a second tab is read-only, follows the writer's saves, and is promoted when the writer moves on; closing one tab with a write still travelling hands the database on and the write lands anyway; the survivor keeps the vault across a reload; the blank page is one page, so a second tab gets a sheet of its own that stays its own after the first tab goes, while the shared sheet is left untouched. No case assumes which tab is the owner |
-| preferences | The blank page keeps what you type without writing to the vault, and filing lands it in the Pile; "reopen the last note" works; the paper can be a legal pad and the rule can go; green bar paper prints its bands and tractor-feed holes; the grain re-scales; Settings names the backend; the paper, the desk and the pen are chosen separately; the vault exports to a real download and imports back into a **separate browser profile**, and an import over a note that differs files it alongside; the database dumps to a `.sqlite` whose first 16 bytes really are the SQLite header and which replaces a separate profile's vault, while a file that is not a database is refused without changing anything |
+| preferences | A tool's key can be rebound and works at once, on the button and in the note, while a key another tool has is refused without firing that tool; the blank page keeps what you type without writing to the vault, and filing lands it in the Pile; "reopen the last note" works; the paper can be a legal pad and the rule can go; green bar paper prints its bands and tractor-feed holes; the grain re-scales; Settings names the backend; the paper, the desk and the pen are chosen separately; the vault exports to a real download and imports back into a **separate browser profile**, and an import over a note that differs files it alongside; the database dumps to a `.sqlite` whose first 16 bytes really are the SQLite header and which replaces a separate profile's vault, while a file that is not a database is refused without changing anything |
 
 ## Pitfalls the suite encodes
 

@@ -849,6 +849,31 @@ test.describe('editor', () => {
     await expect(canvas).toContainText('It cost $5 and $10.');
   });
 
+  test('citing a selected sentence keeps the sentence', async ({ app }) => {
+    test.slow();
+    await openApp(app);
+    await newNote(app.page);
+    await setTitle(app.page, 'Cited selection');
+    await typeInCanvas(app.page, 'A claim worth citing.');
+
+    // Select what you are about to cite, the way anybody would.
+    await app.page.keyboard.press('Shift+Home');
+    expect(await app.page.evaluate(() => document.getSelection()?.toString())).toBe(
+      'A claim worth citing.'
+    );
+
+    await app.page.keyboard.press('Alt+Digit0');
+    await expect(app.page.getByTestId('notebook-footnote-dialog')).toBeVisible({ timeout: 15_000 });
+
+    // The citation goes AFTER the sentence. It used to go INSTEAD of it:
+    // `replaceSelectionWith` replaces, and the sentence was gone.
+    const canvas = app.page.locator('[data-testid="notebook-canvas"] [contenteditable="true"]');
+    await expect(canvas.first()).toContainText('A claim worth citing.');
+    await expect
+      .poll(async () => (await app.read('Cited selection.md'))?.content ?? '', { timeout: 30_000 })
+      .toContain('A claim worth citing.[^1]');
+  });
+
   test('every tool on the toolbar has a key, and none of them types', async ({ app }) => {
     test.slow();
     await openApp(app);
@@ -893,6 +918,13 @@ test.describe('editor', () => {
     await openApp(app);
     await newNote(app.page);
     await setTitle(app.page, 'Palette tools');
+    // The toolbar wears them too, so they are learnable without opening
+    // anything at all.
+    await expect(app.page.getByTestId('notebook-key-formula')).toHaveText('Alt+F');
+    await expect(app.page.getByTestId('notebook-key-diagram')).toHaveText('Alt+M');
+    await expect(app.page.getByTestId('notebook-key-drawing')).toHaveText('Alt+E');
+    await expect(app.page.getByTestId('notebook-key-footnotes')).toHaveText('Alt+0');
+
     await openPalette(app.page);
     // Each row carries its shortcut, so the palette is where you learn them.
     await expect(item(app.page, 'Insert a formula')).toContainText('Alt+F');
@@ -1583,6 +1615,9 @@ test.describe('preferences', () => {
     await app.page.keyboard.press('Alt+KeyQ');
     await expect(app.page.getByTestId('notey-shortcut-formula')).toHaveText('Alt+Q');
     await expect(app.page.getByTestId('notey-shortcut-note')).toContainText('Alt+Q');
+    // The label on the toolbar button is the preference, so it has already
+    // changed — behind the palette, without a reload.
+    await expect(app.page.getByTestId('notebook-key-formula')).toHaveText('Alt+Q');
 
     // Back to the note: the new key works without a reload, and the old one
     // is nobody's.

@@ -21,11 +21,32 @@ same text underneath all three.
 
 The face you leave the editor in is the one you come back to.
 
+## The four tools, and their keys
+
+Each tool on the toolbar has a key, and the button shows it:
+
+| Tool | Key |
+| --- | --- |
+| **∑ Formula** | Alt+F |
+| **◇ Diagram** | Alt+M |
+| **✏ Draw** | Alt+E |
+| **⁋ Footnotes** | Alt+0 |
+
+The same four are in **Ctrl+K** as *Insert a formula*, *Insert a diagram*,
+*Insert a drawing* and *Insert a footnote*, each showing its key.
+
+To change a key, go to **Ctrl+K → Settings → Editor shortcuts**, press
+**Change** beside a tool and then press the keys you want. It needs Ctrl,
+Alt or Cmd and a letter, a digit or an F-key, and it will not take a key
+another tool already has. Escape stops waiting; **Reset to defaults** puts
+all four back. The buttons relabel themselves the moment you change one.
+
 ## Footnotes
 
 Press **Alt+0** with the cursor in ordinary text: you get a numbered citation
 where the cursor was and a dialog open on its note, ready to write. Press it
-on an existing citation and the dialog opens on *that* note.
+on an existing citation and the dialog opens on *that* note. Select a phrase
+first and the citation lands just after it.
 
 The **⁋ Footnotes** button (with a count) opens the same dialog for all of
 them. Rename a label and every citation renames with it; delete a note and

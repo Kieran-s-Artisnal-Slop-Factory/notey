@@ -95,6 +95,20 @@ looking at someone else's notes as they see them, not for merging: use the
 zip for that. Every open tab reloads afterwards, because what they were
 showing is gone.
 
+## Editor shortcuts
+
+The four tools on the editor's toolbar — a formula, a diagram, a drawing, a
+footnote — each open with a key, and each key can be changed here. Press
+**Change** beside one and then press the keys you want.
+
+A shortcut needs **Ctrl, Alt or Cmd** and a letter, a digit or an F-key.
+Shift on its own is not enough, or a tool would open every time you typed
+that letter as a capital. A key another tool already has is refused, and so
+is Ctrl+K, which is how you got here. **Escape** stops waiting for a key
+without changing anything, and **Reset to defaults** puts all four back.
+
+The toolbar buttons show their keys, so a change is visible straight away.
+
 ## Your vault
 
 This card tells you which storage notey actually got:
@@ -128,7 +142,7 @@ desktop app shows neither, because it has nothing to download.
 
 - **Settings are per device, not per vault.** They live in this browser's
   local storage, so they do not travel with an export and are not shared
-  between browsers.
+  between browsers. Shortcuts included.
 - **The command palette never sits on the desk texture.** It always paints
   itself a solid page colour, so it stays readable over the busiest wood.
 - **The desk is decoration only.** Nothing about your notes changes with it,

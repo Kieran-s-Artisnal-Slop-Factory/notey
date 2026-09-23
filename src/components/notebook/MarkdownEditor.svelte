@@ -1077,7 +1077,9 @@
       // Keep a citation out of the notes block: with the caret at the end of
       // the document, "here" means the end of the prose, not inside a note.
       const limit = findDefinitions(md)[0]?.from ?? md.length;
-      const at = Math.min(cm.state.selection.main.head, limit);
+      // `to`, not `head`: a citation goes after what it cites, whichever end
+      // of a selection the caret happens to be at.
+      const at = Math.min(cm.state.selection.main.to, limit);
       const text = md.slice(0, at) + references + md.slice(at);
       // One transaction, so one undo takes the whole change back.
       cm.dispatch({
@@ -1167,7 +1169,13 @@
         const reference = view.state.schema.nodes['footnote_reference'];
         if (!reference) return;
         view.focus();
-        view.dispatch(view.state.tr.replaceSelectionWith(reference.create({ label }), false));
+        // A citation goes AFTER what it cites. Collapsing to the end of the
+        // selection first is not a nicety: `replaceSelectionWith` replaces,
+        // so citing a sentence somebody had selected DELETED that sentence
+        // and left the little number where it had been.
+        const tr = view.state.tr;
+        tr.setSelection(Selection.near(tr.doc.resolve(view.state.selection.to)));
+        view.dispatch(tr.replaceSelectionWith(reference.create({ label }), false));
         placed = true;
       });
     } catch {
@@ -1506,6 +1514,7 @@
       onclick={openMath}
     >
       ∑ Formula
+      {#if shortcuts.formula}<kbd data-testid="notebook-key-formula">{shortcuts.formula}</kbd>{/if}
     </button>
     <button
       type="button"
@@ -1516,6 +1525,7 @@
       onclick={openDiagram}
     >
       ◇ Diagram
+      {#if shortcuts.diagram}<kbd data-testid="notebook-key-diagram">{shortcuts.diagram}</kbd>{/if}
     </button>
     <button
       type="button"
@@ -1526,6 +1536,7 @@
       onclick={openDrawing}
     >
       ✏ Draw
+      {#if shortcuts.drawing}<kbd data-testid="notebook-key-drawing">{shortcuts.drawing}</kbd>{/if}
     </button>
     <button
       type="button"
@@ -1537,6 +1548,7 @@
     >
       ⁋ Footnotes
       {#if footnoteNotes.length > 0}<span class="count">{footnoteNotes.length}</span>{/if}
+      {#if shortcuts.footnotes}<kbd data-testid="notebook-key-footnotes">{shortcuts.footnotes}</kbd>{/if}
     </button>
     <span class="toolbar-gap"></span>
     <button
@@ -1721,6 +1733,35 @@
   .editor-toolbar button:disabled {
     opacity: 0.45;
     cursor: default;
+  }
+
+  /* The key that opens each tool, on the button itself: a shortcut nobody
+     can see is a shortcut nobody uses. It follows the preference, because
+     it IS the preference — `shortcuts` comes down from the app. */
+  .editor-toolbar kbd {
+    margin-left: 0.4em;
+    padding: 0 0.35em;
+    border: 1px solid var(--border-color);
+    border-radius: var(--radius-sm);
+    font-family: var(--font-mono);
+    font-size: 0.8em;
+    font-weight: 400;
+    letter-spacing: 0;
+    text-transform: none;
+    opacity: 0.75;
+  }
+
+  .editor-toolbar button:disabled kbd {
+    /* Preview has nothing to insert into, so the key does nothing either. */
+    opacity: 0.4;
+  }
+
+  /* A narrow screen is a touch screen, where there is no key to press and
+     the room is better spent on the buttons. */
+  @media (max-width: 44rem) {
+    .editor-toolbar kbd {
+      display: none;
+    }
   }
 
   /* How many notes the document carries — the only thing on screen that says

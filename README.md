@@ -18,8 +18,9 @@ desktop program that writes plain `.md` files to a folder you own.
   the red rule.
 - **A real editor**, ported from [useful](../useful): rich WYSIWYG, raw
   Markdown and rendered Preview over one string; footnotes with a dialog
-  (Alt+0); mermaid diagrams with a template workbench; Excalidraw drawings
-  saved as re-editable PNGs; pasted images; and a **formula editor** —
+  (Alt+0, rebindable, like every tool's key); mermaid diagrams with a
+  template workbench; Excalidraw drawings saved as re-editable PNGs; pasted
+  images; and a **formula editor** —
   MathLive, so you write maths as it looks (`pi` → π, `/` → a fraction)
   and it is saved as ordinary `$…$` markdown.
 - **`[[Wiki links]]`** resolved by title, with computed backlinks, automatic

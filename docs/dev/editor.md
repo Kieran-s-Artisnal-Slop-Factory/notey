@@ -24,6 +24,7 @@ _Describes the code as of v0.1.0 (unreleased; schema v1) — verify against sour
 | [src/lib/notebook/math.ts](../../src/lib/notebook/math.ts) | Lazy MathLive renderer; `typeset` and `renderMathIn` |
 | [src/lib/notebook/mathNode.ts](../../src/lib/notebook/mathNode.ts) | The canvas's maths nodes, in place of Crepe's |
 | [src/lib/notebook/mathText.ts](../../src/lib/notebook/mathText.ts) | Pure: find a formula in source, write one back, money vs maths |
+| [src/lib/notebook/shortcuts.ts](../../src/lib/notebook/shortcuts.ts) | Pure: the four tools, their keys, and how a keypress is read |
 
 ## Three faces, one string
 
@@ -91,14 +92,54 @@ definitions**, so a round-trip through the rich view would drop every
    caret is inside one) with `addToHistory: false`, so the notes live in the
    markdown and in the dialog, never in the prose.
 
-**Alt+0** is claimed on the **capture phase of the editor root**, not with an
-`onkeydown` on the element: a real keypress inside the ProseMirror canvas
-never reached that handler, because the editors consume Alt-combinations on
-the way up. A synthetic event did arrive, which is exactly why the bug
-survived a port. The dialog, in turn, ignores keys until a task boundary
-after it mounts — its window listener is registered while the opening
-keystroke is still being dispatched, and without the guard Alt+0 opened and
-instantly closed it.
+The footnote dialog ignores keys until a task boundary after it mounts — its
+window listener is registered while the opening keystroke is still being
+dispatched, and without the guard the shortcut opened and instantly closed
+it. It closes on whatever key opened it, which is passed in as `closeKey`
+rather than hard-coded, so a rebound shortcut still works both ways.
+
+**A citation goes after what it cites.** `citeFootnote` collapses the
+selection to its end before inserting: `replaceSelectionWith` replaces, so
+citing a sentence somebody had selected used to DELETE that sentence and
+leave the little number where it had been. Source view inserts at
+`selection.main.to` for the same reason.
+
+## Shortcuts and the palette
+
+Every tool on the toolbar is reachable three ways: the button, a key, and a
+command in the palette. The keys are a preference
+([shortcuts.ts](../../src/lib/notebook/shortcuts.ts)):
+
+| Tool | Key |
+| --- | --- |
+| Formula | `Alt+F` |
+| Diagram | `Alt+M` |
+| Draw | `Alt+E` |
+| Footnotes | `Alt+0` |
+
+- **`TOOLS` is one list**, and the toolbar, the palette rows and the
+  Settings rows all read it, so they cannot drift apart.
+- **The keys are claimed on the CAPTURE phase of the editor root**, not with
+  an `onkeydown` on the element: a real keypress inside the ProseMirror
+  canvas never reached that handler, because the editors consume
+  Alt-combinations on the way up. A synthetic event did arrive, which is
+  exactly why that bug survived a port. A dialog that is already open keeps
+  its own keys — the handler stands down while one is up.
+- **A keypress is matched on `event.code`**, with `event.key` only as a
+  fallback. macOS reports `key: 'ƒ'` for Alt+F and `'º'` for Alt+0, so a
+  `key` comparison stops working the moment somebody holds Option. (The
+  footnote shortcut already did this for `Digit0`.)
+- **A bind needs Ctrl, Alt or Cmd.** Shift alone is not enough: a tool bound
+  to `F` would open while you typed the word "off".
+- **`openTool(id)` is exported**, which is how the palette reaches the
+  dialogs — `NoteyApp` passes `onInsert` only when a face can take an
+  insertion, so the four commands are absent in Preview.
+- **The button wears its key** in a `<kbd>`, and the tooltip repeats it.
+  Both read the live preference, so a rebinding shows up at once; they are
+  hidden under 44rem, where there is no keyboard to press them with.
+- `readShortcuts` is what makes a hand-edited preference safe: anything
+  unreadable, reserved (`Ctrl+K` is the palette) or already taken falls back
+  to the default, so no tool can be left unreachable.
 
 ## Diagrams
 

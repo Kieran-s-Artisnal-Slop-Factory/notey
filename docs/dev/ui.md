@@ -101,6 +101,12 @@ difference decides what Enter does. Headings are rows in the same list with
 With an unfiled page that has something on it: **File this note in the
 Pile**, and one command per notebook.
 
+While a face that can take an insertion is open (anything but Preview):
+**Insert a formula** · **Insert a diagram** · **Insert a drawing** ·
+**Insert a footnote**, each with its shortcut on the right. They are the
+editor's toolbar, reachable from the keyboard; `NoteyApp` passes `onInsert`
+through to the palette and it calls the editor's `openTool`.
+
 With a note open: Links to and from this note · Export as Markdown · Export
 as HTML · Print / Save as PDF · Close this note · Delete this note. When the
 open note is being written in another tab, "Delete this note" is replaced by

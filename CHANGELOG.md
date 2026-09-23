@@ -102,6 +102,17 @@
   are saved as ordinary `$…$` and `$$…$$` markdown. One engine now does all
   the maths — the editor, the page, Preview and the HTML export — where
   KaTeX used to draw formulas you could only write as code.
+* **Every tool on the editor's toolbar has a key, and the button says so.**
+  A formula is **Alt+F**, a diagram **Alt+M**, a drawing **Alt+E** and a
+  footnote **Alt+0** as before; each button carries its key in small type,
+  and each is also a command in Ctrl+K — *Insert a formula*, *Insert a
+  diagram*, *Insert a drawing*, *Insert a footnote* — which is how you reach
+  them from the keyboard without remembering anything. **Settings → Editor
+  shortcuts** changes any of them: press Change, press the keys. A key needs
+  Ctrl, Alt or Cmd, cannot be one another tool already has, and cannot be
+  Ctrl+K; the buttons relabel themselves the moment it changes. Keys are
+  matched on the physical key rather than the character it produces, so they
+  keep working on a Mac, where Alt+F types "ƒ".
 * **The whole app is downloaded on the first visit.** The build writes the
   list of every file it made, and the service worker fetches all of it
   straight away — every lazily loaded feature, the database engine, every
@@ -181,6 +192,14 @@ Found while building 0.1.0. The first three are in code ported from
 * **Prices are prose in the rich view too.** "$5 and $10" was drawn as a
   formula reading "5 and" in the rich view while Preview, correctly, left it
   alone; the two now follow the same rule.
+* **Citing a sentence no longer deletes the sentence.** Selecting a phrase
+  and pressing Alt+0 replaced it with the footnote's little number — the
+  citation was inserted OVER the selection rather than after it. It now
+  lands just after what you selected, in both the rich view and Source. The
+  footnote dialog's save had a quieter version of the same fault: it rebuilt
+  the document from the markdown as it stood before the last fifth of a
+  second of typing, so a note written and footnoted in one movement could
+  lose the last few words.
 
 ## Other
 
