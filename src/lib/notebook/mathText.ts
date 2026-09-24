@@ -132,6 +132,31 @@ export function unescapeDollars(md: string): string {
   );
 }
 
+/** The largest matrix the size picker offers, each way. */
+export const MATRIX_MAX = 10;
+
+/**
+ * An empty `rows` × `cols` matrix, as MathLive insertion LaTeX.
+ *
+ * `#0` in the first cell is where the caret lands; every other cell is a
+ * `#?` placeholder, which Tab steps through — so a 3 × 3 is filled in by
+ * typing and tabbing, never by clicking. Sizes are clamped to 1…MATRIX_MAX
+ * and rounded, so a stray value from the inputs still makes a matrix.
+ */
+export function matrixLatex(rows: number, cols: number): string {
+  const clamp = (n: number) =>
+    Math.min(MATRIX_MAX, Math.max(1, Number.isFinite(n) ? Math.round(n) : 1));
+  const r = clamp(rows);
+  const c = clamp(cols);
+  const lines: string[] = [];
+  for (let i = 0; i < r; i++) {
+    const cells: string[] = [];
+    for (let j = 0; j < c; j++) cells.push(i === 0 && j === 0 ? '#0' : '#?');
+    lines.push(cells.join(' & '));
+  }
+  return `\\begin{pmatrix}${lines.join(' \\\\ ')}\\end{pmatrix}`;
+}
+
 /**
  * A formula as markdown.
  *

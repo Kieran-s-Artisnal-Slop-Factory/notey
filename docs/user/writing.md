@@ -71,6 +71,10 @@ not as code. Type and it typesets as you go:
 - The row of buttons above covers fractions, roots, powers, subscripts,
   sums, integrals, brackets that grow, and a matrix. The ⌨ inside the field
   opens a full on-screen maths keyboard.
+- **[ ]** asks for the matrix's size first — rows, then columns, up to 10
+  each — and inserts an empty one that size. Type the first entry, then Tab
+  through the rest. Enter inserts it; Escape backs out without closing the
+  formula editor.
 
 The **LaTeX** box underneath is the same formula written out. Edit either
 one and the other follows, so if you do know LaTeX you can paste it in.

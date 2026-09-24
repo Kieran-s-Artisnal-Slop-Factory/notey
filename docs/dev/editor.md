@@ -198,7 +198,12 @@ Source view the button opens on the formula the cursor is in
 fences). The mathfield and a LaTeX box edit each other. A shelf of eight
 buttons covers what people reach for constantly; everything else is on
 MathLive's own keyboard or a typed shortcut. "On its own line" switches
-between `$…$` and `$$…$$`.
+between `$…$` and `$$…$$`. The matrix button is the one that asks first: a
+rows × columns picker (1–10 each, `MATRIX_MAX`) whose answer `matrixLatex`
+turns into a `pmatrix` with `#0` in the first cell and `#?` everywhere else,
+so the cells are filled by typing and Tab. It used to insert a fixed 2 × 2,
+and growing that meant MathLive's context menu one row at a time. Escape
+closes the picker before it closes the dialog.
 
 Four settings in it are load-bearing:
 

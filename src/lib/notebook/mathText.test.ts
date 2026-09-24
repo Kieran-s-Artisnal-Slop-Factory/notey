@@ -1,5 +1,12 @@
 import { describe, expect, it } from 'vitest';
-import { looksLikeMath, mathAt, mathMarkdown, unescapeDollars } from './mathText';
+import {
+  MATRIX_MAX,
+  looksLikeMath,
+  mathAt,
+  mathMarkdown,
+  matrixLatex,
+  unescapeDollars,
+} from './mathText';
 
 /** The offset just after `needle` starts, for readable cursor positions. */
 const inside = (text: string, needle: string) => text.indexOf(needle) + 1;
@@ -124,6 +131,31 @@ describe('the dollars remark-stringify escapes', () => {
 
   it('still repairs the prose around a code span', () => {
     expect(unescapeDollars('\\$5 for `\\$X` and \\$6')).toBe('$5 for `\\$X` and $6');
+  });
+});
+
+describe('an empty matrix of a chosen size', () => {
+  it('puts the caret in the first cell and a placeholder in every other', () => {
+    expect(matrixLatex(2, 2)).toBe(String.raw`\begin{pmatrix}#0 & #? \\ #? & #?\end{pmatrix}`);
+  });
+
+  it('has the rows and columns asked for', () => {
+    const latex = matrixLatex(3, 4);
+    const body = latex.replace(/^\\begin\{pmatrix\}|\\end\{pmatrix\}$/g, '');
+    const rows = body.split(' \\\\ ');
+    expect(rows).toHaveLength(3);
+    for (const row of rows) expect(row.split(' & ')).toHaveLength(4);
+  });
+
+  it('makes a single row or column without a stray separator', () => {
+    expect(matrixLatex(1, 3)).toBe(String.raw`\begin{pmatrix}#0 & #? & #?\end{pmatrix}`);
+    expect(matrixLatex(2, 1)).toBe(String.raw`\begin{pmatrix}#0 \\ #?\end{pmatrix}`);
+  });
+
+  it('clamps a size it cannot use rather than producing nonsense', () => {
+    expect(matrixLatex(0, 0)).toBe(matrixLatex(1, 1));
+    expect(matrixLatex(99, 2)).toBe(matrixLatex(MATRIX_MAX, 2));
+    expect(matrixLatex(Number.NaN, 2.6)).toBe(matrixLatex(1, 3));
   });
 });
 

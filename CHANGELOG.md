@@ -102,6 +102,11 @@
   are saved as ordinary `$…$` and `$$…$$` markdown. One engine now does all
   the maths — the editor, the page, Preview and the HTML export — where
   KaTeX used to draw formulas you could only write as code.
+* **The matrix button asks how big.** In the formula editor, **[ ]** now
+  opens a rows × columns picker (up to 10 each) and inserts an empty matrix
+  of that size, with the cursor in the first entry and Tab stepping through
+  the rest. It used to insert a 2 × 2 that had to be grown one row at a time
+  from a menu.
 * **Every tool on the editor's toolbar has a key, and the button says so.**
   A formula is **Alt+F**, a diagram **Alt+M**, a drawing **Alt+E** and a
   footnote **Alt+0** as before; each button carries its key in small type,

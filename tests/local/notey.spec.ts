@@ -981,6 +981,39 @@ test.describe('editor', () => {
       .toContain(String.raw`$\pi$`);
   });
 
+  test('the matrix button asks for a size, then inserts that matrix', async ({ app }) => {
+    await openApp(app);
+    await newNote(app.page);
+    await setTitle(app.page, 'Matrices');
+    await app.page.getByTestId('notebook-toolbar-math').click();
+    await expect(app.page.getByTestId('notebook-math-loading')).toHaveCount(0, { timeout: 60_000 });
+
+    // Nothing is inserted on the first click: it asks.
+    await app.page.getByTestId('notebook-math-matrix').click();
+    await expect(app.page.getByTestId('notebook-math-matrix-size')).toBeVisible();
+    await expect(app.page.getByTestId('notebook-math-latex')).toHaveValue('');
+
+    // Escape backs out of the question, not out of the dialog.
+    await app.page.getByTestId('notebook-math-matrix-rows').press('Escape');
+    await expect(app.page.getByTestId('notebook-math-matrix-size')).toHaveCount(0);
+    await expect(app.page.getByTestId('notebook-math-dialog')).toBeVisible();
+
+    await app.page.getByTestId('notebook-math-matrix').click();
+    await app.page.getByTestId('notebook-math-matrix-rows').fill('3');
+    await app.page.getByTestId('notebook-math-matrix-cols').fill('4');
+    await expect(app.page.getByTestId('notebook-math-matrix-insert')).toHaveText(
+      'Insert 3 × 4 matrix'
+    );
+    await app.page.getByTestId('notebook-math-matrix-cols').press('Enter');
+    await expect(app.page.getByTestId('notebook-math-matrix-size')).toHaveCount(0);
+
+    // Three rows of four, straight into the formula.
+    const latex = await app.page.getByTestId('notebook-math-latex').inputValue();
+    const body = /\\begin\{pmatrix\}([\s\S]*)\\end\{pmatrix\}/.exec(latex)?.[1] ?? '';
+    const grid = body.split('\\\\').map((row) => row.split('&').length);
+    expect(grid).toEqual([4, 4, 4]);
+  });
+
   test('double-clicking a formula edits that formula, in place', async ({ app }) => {
     await openApp(app);
     await app.write({

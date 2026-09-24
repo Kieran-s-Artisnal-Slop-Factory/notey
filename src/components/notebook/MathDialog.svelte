@@ -32,6 +32,7 @@
    */
   import { onDestroy, onMount } from 'svelte';
   import { ensureFontCss } from '../../lib/math/fonts';
+  import { MATRIX_MAX, matrixLatex } from '../../lib/notebook/mathText';
 
   let {
     initial = '',
@@ -84,8 +85,34 @@
     { label: 'Σ', latex: '\\sum_{#?}^{#?}#0', title: 'Sum' },
     { label: '∫', latex: '\\int_{#?}^{#?}#0', title: 'Integral' },
     { label: '(  )', latex: '\\left(#0\\right)', title: 'Brackets that grow' },
-    { label: '[ ]', latex: '\\begin{pmatrix}#0 & #? \\\\ #? & #?\\end{pmatrix}', title: 'Matrix' },
   ];
+
+  /**
+   * The matrix button asks for a size before it inserts anything. A fixed
+   * 2 × 2 meant adding rows and columns afterwards through MathLive's menu,
+   * one at a time, which is the least findable thing in the editor. Rows
+   * first, then columns, the way a matrix is named (a 2 × 3 has 2 rows).
+   */
+  let sizing = $state(false);
+  let rows = $state(2);
+  let cols = $state(2);
+  let rowsField: HTMLInputElement | undefined = $state();
+
+  function openSizer(): void {
+    sizing = !sizing;
+    if (sizing) queueMicrotask(() => rowsField?.select());
+  }
+
+  function insertMatrix(): void {
+    sizing = false;
+    insert(matrixLatex(rows, cols));
+  }
+
+  function onSizeKey(event: KeyboardEvent): void {
+    if (event.key !== 'Enter') return;
+    event.preventDefault();
+    insertMatrix();
+  }
 
   onMount(async () => {
     // Before anything is awaited: the note behind must stop being the thing
@@ -173,6 +200,13 @@
    */
   function onWindowKeydown(event: KeyboardEvent): void {
     if (event.key !== 'Escape') return;
+    // One step back at a time: the size picker, then the dialog.
+    if (sizing) {
+      event.preventDefault();
+      sizing = false;
+      field?.focus();
+      return;
+    }
     const active = document.activeElement;
     if (field && (active === field || field.contains(active as Node))) return;
     onCancel();
@@ -221,11 +255,57 @@
           onclick={() => insert(item.latex)}>{item.label}</button
         >
       {/each}
+      <button
+        type="button"
+        class="chip"
+        class:on={sizing}
+        title="Matrix — choose its size"
+        aria-expanded={sizing}
+        data-testid="notebook-math-matrix"
+        disabled={!ready}
+        onclick={openSizer}>[ ]</button
+      >
       <span class="muted small">
         …or just type: <code>sqrt</code>, <code>pi</code>, <code>sum</code> and
         <code>/</code> become what they mean.
       </span>
     </div>
+
+    {#if sizing}
+      <div class="sizer" data-testid="notebook-math-matrix-size">
+        <label>
+          Rows
+          <input
+            type="number"
+            min="1"
+            max={MATRIX_MAX}
+            data-testid="notebook-math-matrix-rows"
+            bind:this={rowsField}
+            bind:value={rows}
+            onkeydown={onSizeKey}
+          />
+        </label>
+        <span aria-hidden="true">×</span>
+        <label>
+          Columns
+          <input
+            type="number"
+            min="1"
+            max={MATRIX_MAX}
+            data-testid="notebook-math-matrix-cols"
+            bind:value={cols}
+            onkeydown={onSizeKey}
+          />
+        </label>
+        <button
+          type="button"
+          class="btn btn-sm btn-primary"
+          data-testid="notebook-math-matrix-insert"
+          onclick={insertMatrix}>Insert {rows || 1} × {cols || 1} matrix</button
+        >
+        <button type="button" class="btn btn-sm" onclick={() => (sizing = false)}>Cancel</button>
+      </div>
+    {/if}
 
     <div class="field" bind:this={host}>
       {#if !ready && !error}
@@ -348,6 +428,38 @@
 
   .chip:hover:not(:disabled) {
     border-color: var(--color-primary);
+  }
+
+  .chip.on {
+    border-color: var(--color-primary);
+    background: var(--color-primary-soft);
+  }
+
+  .sizer {
+    display: flex;
+    flex-wrap: wrap;
+    align-items: center;
+    gap: var(--space-2);
+    padding: var(--space-2);
+    border: 1px dashed var(--border-strong-color);
+    border-radius: var(--radius-sm);
+    font-size: var(--font-size-sm);
+  }
+
+  .sizer label {
+    display: flex;
+    align-items: center;
+    gap: var(--space-1);
+  }
+
+  .sizer input {
+    width: 3.5rem;
+    padding: var(--space-1);
+    border: 1px solid var(--border-color);
+    border-radius: var(--radius-sm);
+    background: var(--surface-color);
+    color: var(--text-color);
+    font-family: var(--font-mono);
   }
 
   .chip:disabled {
